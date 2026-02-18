@@ -2,6 +2,7 @@
  * MAIN.JS — Drone OPS Controller
  * Version optimisée production
  */
+// navigator.serviceWorker.register("sw.js")
 
 const REFRESH_INTERVAL = 900; // 15 min
 

@@ -27,57 +27,27 @@ let radarTimer = null;
 // RADAR PLUIE ANIMÉ PRO
 // =====================================================
 
-async function initRainRadar(){
+// Dans map.js
 
-    console.log("🌧️ Init Rain Radar PRO");
+async function initRainRadar() {
+    console.log("🌧️ Init New Radar via WMS");
 
-    try{
-        const res = await fetch("https://api.rainviewer.com/public/weather-maps.json");
-        const data = await res.json();
+    // On crée une couche WMS (plus stable que l'animation de Rainviewer)
+    rainRadarLayer = L.tileLayer.wms("https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0q.cgi", {
+        layers: 'nexrad-n0q-900913',
+        format: 'image/png',
+        transparent: true,
+        opacity: 0.5,
+        pane: "weatherPane",
+        attribution: "NEXRAD via Iowa State Univ"
+    });
 
-        radarFrames = data?.radar?.past?.slice(-10) || [];
-
-        if(!radarFrames.length){
-            throw new Error("Pas de frame radar");
-        }
-
-        // si déjà créé → reset animation
-        if(rainRadarLayer){
-            radarIndex = 0;
-            return rainRadarLayer;
-        }
-
-        rainRadarLayer = L.tileLayer(
-            buildRadarURL(radarFrames[0].path),
-            {
-                pane: "weatherPane",
-                opacity: 0.7,
-
-                // ⭐ ZOOM OPTIMISÉ
-                maxNativeZoom: 10,   // résolution réelle radar
-                maxZoom: 18,
-                keepBuffer: 8,       // évite disparition en zoom rapide
-                updateWhenIdle: true,
-                updateWhenZooming: false,
-                updateInterval: 200,
-                detectRetina: true,
-
-                attribution: "© RainViewer"
-            }
-        );
-
-        startRadarAnimation();
-
-        return rainRadarLayer;
-
-    }catch(e){
-        console.warn("Radar indisponible", e);
-        return null;
-    }
+    // NOTE : Pour la France spécifiquement, si tu veux éviter Rainviewer, 
+    // l'alternative visuelle la plus fiable est souvent de rester sur Rainviewer 
+    // MAIS d'utiliser Open-Meteo pour les données de la colonne de droite.
+    
+    return rainRadarLayer;
 }
-
-
-
 function startRadarAnimation(){
 
     if(radarTimer) clearInterval(radarTimer);

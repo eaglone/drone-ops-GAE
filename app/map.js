@@ -55,35 +55,27 @@ async function initMap() {
     // affichage global ultra rapide
 // ================= DGAC WMTS OFFICIEL =================
 
-let dgacWmtsLayer = null;
+// ================= DGAC WMTS OFFICIEL =================
 
-try {
+let dgacWmtsLayer = L.tileLayer(
+    "https://data.geopf.fr/wmts?" +
+    "SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0" +
+    "&LAYER=TRANSPORTS.DRONES.RESTRICTIONS" + // ✅ bon layer
+    "&STYLE=normal" +
+    "&TILEMATRIXSET=PM" +
+    "&FORMAT=image/png" +
+    "&TILEMATRIX={z}" +
+    "&TILEROW={y}" +
+    "&TILECOL={x}" +
+    "&apikey=essentiels",
+    {
+        opacity: 0.55,
+        attribution: "DGAC / IGN",
+        crossOrigin: true
+    }
+);
 
-    dgacWmtsLayer = L.tileLayer(
-        "https://data.geopf.fr/wmts?" +
-        "SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0" +
-        "&LAYER=DGAC_RESTRICTIONS-UAS" +
-        "&STYLE=normal" +
-        "&TILEMATRIXSET=PM" +
-        "&FORMAT=image/png" +
-        "&TILEMATRIX={z}" +
-        "&TILEROW={y}" +
-        "&TILECOL={x}" +
-        "&apikey=essentiels",   // ⭐ CRUCIAL
-        {
-            opacity: 0.6,
-            attribution: "DGAC / IGN",
-            crossOrigin: "anonymous"
-        }
-    );
-
-    dgacWmtsLayer.addTo(map);
-
-} catch(e){
-    console.warn("DGAC WMTS error", e);
-}
-
-
+dgacWmtsLayer.addTo(map);
 
     // ================= DGAC VECTEUR CLIQUABLE =================
 

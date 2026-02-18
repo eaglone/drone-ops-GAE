@@ -54,18 +54,23 @@ async function initMap() {
     // ================= DGAC WMTS (FRANCE COMPLETE) =================
     // affichage global ultra rapide
 
-    dgacWmtsLayer = L.tileLayer(
-        "https://data.geopf.fr/wmts?" +
-        "SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0" +
-        "&LAYER=DGAC_RESTRICTIONS-UAS" +
-        "&STYLE=normal" +
-        "&TILEMATRIXSET=PM" +
-        "&FORMAT=image/png" +
-        "&TILEMATRIX={z}" +
-        "&TILEROW={y}" +
-        "&TILECOL={x}",
-        { opacity: 0.55 }
-    ).addTo(map);
+  dgacWmtsLayer = L.tileLayer(
+    "https://data.geopf.fr/wmts?" +
+    "SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0" +
+    "&LAYER=DGAC_RESTRICTIONS-UAS" +
+    "&STYLE=normal" +
+    "&TILEMATRIXSET=PM" +
+    "&FORMAT=image/png" +
+    "&TILEMATRIX={z}" +
+    "&TILEROW={y}" +
+    "&TILECOL={x}",
+    {
+        opacity: 0.55,
+        crossOrigin: true,   // 🔥 IMPORTANT
+        referrerPolicy: "no-referrer"
+    }
+);
+
 
     // ================= DGAC VECTEUR CLIQUABLE =================
 

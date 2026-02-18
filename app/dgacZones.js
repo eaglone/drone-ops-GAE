@@ -103,6 +103,35 @@ function onEachDGACFeature(feature, layer) {
             .openOn(window.map);
     });
 }
+// ================= Bounds =================
+async function loadDGACForBounds() {
+
+    if (!window.map || !dgacLayer) return;
+
+    const bounds = window.map.getBounds();
+
+    const bbox = [
+        bounds.getWest(),
+        bounds.getSouth(),
+        bounds.getEast(),
+        bounds.getNorth()
+    ].join(",");
+
+    console.log("📦 DGAC bbox:", bbox);
+
+    const url =
+        `${WFS_URL}?service=WFS&version=2.0.0&request=GetFeature` +
+        `&typeName=${TYPE_NAME}` +
+        `&outputFormat=application/json` +
+        `&srsName=EPSG:4326` +
+        `&bbox=${bbox},EPSG:4326`;
+
+    const res = await fetch(url);
+    const data = await res.json();
+
+    dgacLayer.clearLayers();
+    dgacLayer.addData(data);
+}
 
 
 // ================= LOAD DGAC =================

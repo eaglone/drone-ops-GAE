@@ -84,32 +84,62 @@ function onEachDGACFeature(feature, layer){
 
 
 // ================= CONVERSION UAS → GEOJSON =================
+function isValidGeometry(geom){
+
+    if(!geom) return false;
+    if(!geom.type) return false;
+    if(!geom.coordinates) return false;
+
+    if(geom.type === "Polygon"){
+        if(!Array.isArray(geom.coordinates)) return false;
+        if(!geom.coordinates.length) return false;
+        if(!Array.isArray(geom.coordinates[0])) return false;
+        if(geom.coordinates[0].length < 4) return false; // min polygon
+    }
+
+    if(geom.type === "MultiPolygon"){
+        if(!Array.isArray(geom.coordinates)) return false;
+        if(!geom.coordinates.length) return false;
+    }
+
+    return true;
+}
 
 function convertUASZonesToGeoJSON(data){
 
+    if(!data?.features){
+        return { type:"FeatureCollection", features:[] };
+    }
+
+    let skipped = 0;
+
+    const features = data.features.flatMap(zone => {
+
+        if(!zone.geometry) return [];
+
+        return zone.geometry
+            .filter(g => isValidGeometry(g.horizontalProjection))
+            .map(g => ({
+
+                type:"Feature",
+
+                properties:{
+                    name: zone.name,
+                    restriction: zone.restriction,
+                    lower: g.lowerLimit,
+                    upper: g.upperLimit,
+                    message: zone.message
+                },
+
+                geometry:g.horizontalProjection
+            }));
+    });
+
+    console.log("DGAC valid:", features.length);
+
     return {
         type:"FeatureCollection",
-
-        features:data.features.flatMap(zone => {
-
-            if(!zone.geometry) return [];
-
-            return zone.geometry
-                .filter(g => g.horizontalProjection)
-                .map(g => ({
-                    type:"Feature",
-
-                    properties:{
-                        name: zone.name,
-                        restriction: zone.restriction,
-                        lower: g.lowerLimit,
-                        upper: g.upperLimit,
-                        message: zone.message
-                    },
-
-                    geometry:g.horizontalProjection
-                }));
-        })
+        features
     };
 }
 

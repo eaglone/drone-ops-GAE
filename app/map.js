@@ -156,9 +156,14 @@ const radarLayer = await initRainRadar();
 const overlays = {
     "Carte OACI IGN": oaciLayer,
     "Restrictions drones IGN": dgacIgnLayer,
-    "Radar pluie": radarLayer,
     "Espaces aériens OpenAIP": window.openAipLayer
 };
+
+const radarLayer = await initRainRadar();
+if(radarLayer){
+    overlays["Radar pluie"] = radarLayer;
+}
+
 
 
 if(dgacLayer){

@@ -114,7 +114,12 @@ function convertUASZonesToGeoJSON(data){
 }
 
 
-// ================= LOAD =================
+// ================= REFRESH STYLE =================
+
+function updateDGACStyle(){
+    if(!dgacLayer) return;
+    dgacLayer.setStyle(dgacStyle);
+}
 
 // ================= LOAD =================
 

@@ -76,8 +76,12 @@ async function initMap(){ // Ajout de async pour le chargement des zones
     if(typeof window.loadDGACZones === "function"){
         // On charge la couche mais on ne l'ajoute PAS à la map (.addTo(map))
         // On la récupère juste pour le menu
-        dgacLayer = await window.loadDGACZones();
-    }
+       dgacLayer = await window.loadDGACZones();
+
+if (dgacLayer) {
+    dgacLayer.addTo(map); // 🔥 active la couche
+}
+
 
     // ================= CONTROLE COUCHES
 

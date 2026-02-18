@@ -101,24 +101,19 @@ const dgacIgnLayer = L.tileLayer(
     }).addTo(map);
 
 
-    // ================= DGAC VECTEUR =================
+  // ================= DGAC VECTEUR (optionnel cliquable) =================
 
-    let dgacLayer = null;
+let dgacLayer = null;
 
-    if(typeof window.loadDGACZones === "function"){
-
-        try{
-            dgacLayer = await window.loadDGACZones();
-
-            if(dgacLayer){
-                dgacLayer.addTo(map);
-                console.log("✅ DGAC chargé");
-            }
-
-        }catch(e){
-            console.warn("DGAC erreur", e);
-        }
+if(typeof window.loadDGACZones === "function"){
+    try{
+        dgacLayer = await window.loadDGACZones();
+        console.log("✅ DGAC vecteur prêt (non affiché)");
+    }catch(e){
+        console.warn("DGAC erreur", e);
     }
+}
+
 
 
     // ================= CONTROLE COUCHES =================

@@ -83,14 +83,19 @@ function startRadarAnimation(){
 
         if(!radarFrames.length || !rainRadarLayer) return;
 
-        radarIndex = (radarIndex + 1) % radarFrames.length;
+        radarIndex++;
+
+        if(radarIndex >= radarFrames.length){
+            radarIndex = 0;
+        }
 
         rainRadarLayer.setUrl(
             buildRadarURL(radarFrames[radarIndex].path)
         );
 
-    }, 700);
+    }, 2000); // ← 2000ms = animation plus lente
 }
+
 
 
 // =====================================================

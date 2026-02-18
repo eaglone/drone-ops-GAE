@@ -76,6 +76,22 @@ async function initMap(){
             attribution:"© IGN — Carte OACI"
         }
     ).addTo(map);
+    
+// ================= DGAC IGN WMTS (propre style cartes.gouv.fr) =================
+
+const dgacIgnLayer = L.tileLayer(
+  "https://data.geopf.fr/wmts?" +
+  "SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0" +
+  "&LAYER=TRANSPORTS.DRONES.RESTRICTIONS" +
+  "&STYLE=normal" +
+  "&TILEMATRIXSET=PM" +
+  "&FORMAT=image/png" +
+  "&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}",
+  {
+    opacity:0.75,
+    attribution:"© IGN — Restrictions drones"
+  }
+);
 
 
     // ================= OPENAIP CONTAINER =================
@@ -112,13 +128,15 @@ async function initMap(){
     };
 
     const overlays = {
-        "Carte OACI IGN": oaciLayer,
-        "Espaces aériens OpenAIP": window.openAipLayer
-    };
+    "Carte OACI IGN": oaciLayer,
+    "Restrictions drones IGN (officiel)": dgacIgnLayer,
+    "Espaces aériens OpenAIP": window.openAipLayer
+};
 
-    if(dgacLayer){
-        overlays["DGAC Zones (cliquable)"] = dgacLayer;
-    }
+
+   // ne PAS ajouter automatiquement
+// dgacLayer.addTo(map);  <-- supprime ça
+
 
     L.control.layers(baseMaps, overlays, {
         collapsed:false

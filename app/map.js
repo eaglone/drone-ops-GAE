@@ -1,12 +1,13 @@
 /**
  * MAP.JS — Drone OPS Tactical Map
- * STACK STABLE
+ * VERSION PRO STABLE
  *
  * ORDRE COUCHES :
  * 1. OSM (fond)
  * 2. OACI IGN
  * 3. DGAC vecteur
- * 4. OpenAIP (top)
+ * 4. Radar météo
+ * 5. OpenAIP (top)
  */
 
 let map = null;
@@ -15,6 +16,8 @@ let positionMarker = null;
 let osmLayer = null;
 let oaciLayer = null;
 let rainRadarLayer = null;
+
+
 // ================= RADAR PLUIE =================
 
 async function initRainRadar(){
@@ -34,7 +37,7 @@ async function initRainRadar(){
             `https://tilecache.rainviewer.com${frame}/256/{z}/{x}/{y}/2/1_1.png`,
             {
                 opacity:0.55,
-                pane:"airspacePane",
+                pane:"weatherPane",
                 attribution:"© RainViewer"
             }
         );
@@ -74,12 +77,16 @@ async function initMap(){
     map.createPane("zonesPane");
     map.getPane("zonesPane").style.zIndex = 650;
 
-    // OpenAIP au dessus
+    // météo (entre DGAC et airspace)
+    map.createPane("weatherPane");
+    map.getPane("weatherPane").style.zIndex = 675;
+
+    // OpenAIP top
     map.createPane("airspacePane");
     map.getPane("airspacePane").style.zIndex = 700;
 
 
-    // ================= OSM (BASE) =================
+    // ================= OSM =================
 
     osmLayer = L.tileLayer(
         "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -91,7 +98,6 @@ async function initMap(){
 
 
     // ================= OACI IGN =================
-    // (clé IGN fonctionnelle)
 
     oaciLayer = L.tileLayer(
         "https://data.geopf.fr/private/wmts?" +
@@ -108,72 +114,86 @@ async function initMap(){
             attribution:"© IGN — Carte OACI"
         }
     ).addTo(map);
-    
-// ================= DGAC IGN WMTS (propre style cartes.gouv.fr) =================
-
-const dgacIgnLayer = L.tileLayer(
-  "https://data.geopf.fr/wmts?" +
-  "SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0" +
-  "&LAYER=TRANSPORTS.DRONES.RESTRICTIONS" +
-  "&STYLE=normal" +
-  "&TILEMATRIXSET=PM" +
-  "&FORMAT=image/png" +
-  "&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}",
-  {
-    opacity:0.75,
-    attribution:"© IGN — Restrictions drones"
-  }
-);
 
 
-    // ================= OPENAIP CONTAINER =================
+    // ================= DGAC IGN OFFICIEL =================
+
+    const dgacIgnLayer = L.tileLayer(
+        "https://data.geopf.fr/wmts?" +
+        "SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0" +
+        "&LAYER=TRANSPORTS.DRONES.RESTRICTIONS" +
+        "&STYLE=normal" +
+        "&TILEMATRIXSET=PM" +
+        "&FORMAT=image/png" +
+        "&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}",
+        {
+            opacity:0.75,
+            attribution:"© IGN — Restrictions drones"
+        }
+    );
+
+
+    // ================= OPENAIP =================
 
     window.openAipLayer = L.layerGroup([],{
         pane:"airspacePane"
     }).addTo(map);
 
 
-  // ================= DGAC VECTEUR (optionnel cliquable) =================
+    // ================= DGAC VECTEUR =================
 
-let dgacLayer = null;
+    let dgacLayer = null;
 
-if(typeof window.loadDGACZones === "function"){
-    try{
-        dgacLayer = await window.loadDGACZones();
-        console.log("✅ DGAC vecteur prêt (non affiché)");
-    }catch(e){
-        console.warn("DGAC erreur", e);
+    if(typeof window.loadDGACZones === "function"){
+        try{
+            dgacLayer = await window.loadDGACZones();
+            console.log("✅ DGAC vecteur prêt");
+        }catch(e){
+            console.warn("DGAC erreur", e);
+        }
     }
-}
+
+
+    // ================= RADAR =================
+
+    const radarLayer = await initRainRadar();
+
 
     // ================= CONTROLE COUCHES =================
 
     const baseMaps = {
         "Fond OSM": osmLayer
     };
-const radarLayer = await initRainRadar();
 
-const overlays = {
-    "Carte OACI IGN": oaciLayer,
-    "Restrictions drones IGN": dgacIgnLayer,
-    "Espaces aériens OpenAIP": window.openAipLayer
-};
+    const overlays = {
+        "Carte OACI IGN": oaciLayer,
+        "Restrictions drones IGN": dgacIgnLayer,
+        "Espaces aériens OpenAIP": window.openAipLayer
+    };
 
-const radarLayer = await initRainRadar();
-if(radarLayer){
-    overlays["Radar pluie"] = radarLayer;
-}
+    if(radarLayer){
+        overlays["Radar pluie"] = radarLayer;
+    }
 
-
-
-if(dgacLayer){
-    overlays["DGAC Zones cliquables (avancé)"] = dgacLayer;
-}
-
+    if(dgacLayer){
+        overlays["DGAC Zones cliquables (avancé)"] = dgacLayer;
+    }
 
     L.control.layers(baseMaps, overlays, {
         collapsed:false
     }).addTo(map);
+
+
+    // ================= AUTO REFRESH RADAR =================
+
+    setInterval(async ()=>{
+        if(!rainRadarLayer) return;
+
+        const newLayer = await initRainRadar();
+        if(newLayer){
+            rainRadarLayer.setUrl(newLayer._url);
+        }
+    }, 300000); // 5 min
 
 
     // ================= INIT OPENAIP =================
@@ -183,7 +203,6 @@ if(dgacLayer){
             initOpenAIPAutoUpdate();
         }
     },500);
-
 
     console.log("✅ MAP READY");
 }
@@ -230,7 +249,7 @@ function setOpenAIPLayer(layer){
 }
 
 
-// ================= EXPORT GLOBAL =================
+// ================= EXPORT =================
 
 window.initMap = initMap;
 window.updateMapPosition = updateMapPosition;

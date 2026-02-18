@@ -1,15 +1,14 @@
 /**
  * MAP.JS — Drone OPS Tactical Map
  * OSM + IGN OACI + OpenAIP
- * Version stable GitHub Pages
+ * Version production GitHub Pages stable
  */
 
-let map;
-let positionMarker;
+let map = null;
+let positionMarker = null;
 
-let osmLayer;
-let oaciLayer;
-let openAipLayer;
+let osmLayer = null;
+let oaciLayer = null;
 
 
 // ================= INIT MAP =================
@@ -20,15 +19,23 @@ function initMap(){
 
     console.log("🗺️ Initialisation carte");
 
-    map = L.map("map").setView([window.latitude, window.longitude], 10);
+    // sécurité double init
+    if(map) return;
 
-// IMPORTANT — créer pane AVANT tout
-if (!map.getPane("zonesPane")) {
-    map.createPane("zonesPane");
-    map.getPane("zonesPane").style.zIndex = 650;
-}
+    map = L.map("map",{
+        zoomControl:true
+    }).setView([window.latitude, window.longitude],10);
 
+    // rendre accessible globalement
     window.map = map;
+
+
+    // ================= PANE PRIORITÉ ZONES =================
+
+    if(!map.getPane("zonesPane")){
+        map.createPane("zonesPane");
+        map.getPane("zonesPane").style.zIndex = 650;
+    }
 
 
     // ================= OSM (fond sécurité)
@@ -56,28 +63,31 @@ if (!map.getPane("zonesPane")) {
     ).addTo(map);
 
 
-    // ================= OPENAIP (groupe dynamique)
+    // ================= OPENAIP GLOBAL LAYER (IMPORTANT)
 
-    openAipLayer = L.layerGroup().addTo(map);
+    // 👉 toujours global sinon openaip.js plante
+    window.openAipLayer = L.layerGroup().addTo(map);
 
 
     // ================= CONTROLE COUCHES
 
     L.control.layers(
-        { "Fond OSM": osmLayer },
+        {
+            "Fond OSM": osmLayer
+        },
         {
             "Carte OACI IGN": oaciLayer,
-            "Espaces aériens OpenAIP": openAipLayer
+            "Espaces aériens OpenAIP": window.openAipLayer
         },
         { collapsed:false }
     ).addTo(map);
 
 
-    // auto refresh OpenAIP si déplacement
-    map.on("moveend", () => {
-        const c = map.getCenter();
-        loadOpenAIPAirspaces?.(c.lat, c.lng);
-    });
+    // ================= AUTO UPDATE OPENAIP
+
+    if(typeof initOpenAIPAutoUpdate === "function"){
+        initOpenAIPAutoUpdate();
+    }
 
     console.log("✅ MAP READY");
 }
@@ -91,7 +101,9 @@ function updateMapPosition(lat,lon){
 
     map.flyTo([lat,lon],11,{duration:0.6});
 
-    if(positionMarker) map.removeLayer(positionMarker);
+    if(positionMarker){
+        map.removeLayer(positionMarker);
+    }
 
     positionMarker = L.circle([lat,lon],{
         radius:500,
@@ -100,25 +112,29 @@ function updateMapPosition(lat,lon){
         fillOpacity:0.15
     }).addTo(map);
 
-    loadOpenAIPAirspaces?.(lat,lon);
-}
-
-
-// ================= OPENAIP RENDER =================
-
-function setOpenAIPLayer(layer){
-
-    if(!openAipLayer) return;
-
-    openAipLayer.clearLayers();
-
-    if(layer){
-        openAipLayer.addLayer(layer);
+    // refresh airspaces
+    if(typeof loadOpenAIPAirspaces === "function"){
+        loadOpenAIPAirspaces(lat,lon);
     }
 }
 
 
-// ================= EXPORT GLOBAL =================
+// ================= OPENAIP LAYER CONTROL (compat ancien code)
+
+function setOpenAIPLayer(layer){
+
+    if(!window.openAipLayer) return;
+
+    try{
+        window.openAipLayer.clearLayers();
+        if(layer) window.openAipLayer.addLayer(layer);
+    }catch(e){
+        console.warn("OpenAIP layer error", e);
+    }
+}
+
+
+// ================= EXPORT GLOBAL
 
 window.initMap = initMap;
 window.updateMapPosition = updateMapPosition;

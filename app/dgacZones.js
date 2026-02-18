@@ -133,7 +133,6 @@ async function loadDGACZones(){
     try{
 
         const res = await fetch("app/UASZones.json");
-
         if(!res.ok) throw new Error("JSON non trouvé");
 
         const data = await res.json();
@@ -141,17 +140,27 @@ async function loadDGACZones(){
 
         console.log("DGAC features:", geojson.features.length);
 
+        if(!geojson.features.length){
+            console.warn("⚠️ Aucun polygone DGAC");
+            return null;
+        }
+
         dgacLayer = L.geoJSON(geojson,{
             pane:"zonesPane",
             style:dgacStyle,
             onEachFeature:onEachDGACFeature
         });
 
-        // ⭐ update style quand zoom change (une seule fois)
-       if(!window.dgacZoomListener){
-    window.map.on("zoomend", updateDGACStyle);
-    window.dgacZoomListener = true;
-}
+        // ajoute à la carte
+        dgacLayer.addTo(window.map);
+
+        // listener zoom une seule fois
+        if(!window.dgacZoomListener){
+            window.map.on("zoomend", updateDGACStyle);
+            window.dgacZoomListener = true;
+        }
+
+        console.log("✅ DGAC prêt");
 
         return dgacLayer;
 
@@ -160,6 +169,7 @@ async function loadDGACZones(){
         return null;
     }
 }
+
 
 window.loadDGACZones = loadDGACZones;
 

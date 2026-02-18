@@ -137,6 +137,12 @@ async function loadDGACForBounds() {
 // ================= LOAD DGAC =================
 
 async function loadDGACZones() {
+    // recharge quand la carte bouge
+window.map.on("moveend", loadDGACForBounds);
+
+// premier chargement
+await loadDGACForBounds();
+
 
     if (dgacLayer) return dgacLayer;
 

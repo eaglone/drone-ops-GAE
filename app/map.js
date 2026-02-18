@@ -18,13 +18,7 @@ let oaciLayer = null;
 let rainRadarLayer = null;
 
 
-// ================= RADAR PLUIE =================
 // ================= RADAR PLUIE ANIMÉ PRO =================
-
-let rainRadarLayer = null;
-let radarFrames = [];
-let radarIndex = 0;
-let radarTimer = null;
 
 async function initRainRadar(){
 

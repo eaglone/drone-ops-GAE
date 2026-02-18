@@ -85,21 +85,19 @@ async function loadDGACZones(){
 
     try{
 
-        const res = await fetch("./app/UASZones.json");
+        const res = await fetch("./UASZones.json");
 
         if(!res.ok) throw new Error("JSON non trouvé");
 
         const data = await res.json();
 
-       const geojson = convertUASZonesToGeoJSON(raw);
+        const geojson = convertUASZonesToGeoJSON(data);
 
-dgacLayer = L.geoJSON(geojson,{
-    pane:"zonesPane",
-    style:dgacStyle,
-    onEachFeature:onEachDGACFeature
-});
-
-
+        dgacLayer = L.geoJSON(geojson,{
+            pane:"zonesPane",
+            style:dgacStyle,
+            onEachFeature:onEachDGACFeature
+        });
 
         console.log("✅ DGAC chargé");
 
@@ -110,5 +108,6 @@ dgacLayer = L.geoJSON(geojson,{
         return null;
     }
 }
+
 
 window.loadDGACZones = loadDGACZones;

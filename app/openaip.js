@@ -68,40 +68,43 @@ function renderAirspaces(items){
 
     if(!window.map) return;
 
-    const features = [];
+    // créer groupe si inexistant
+    if(!openAipLayer){
+        openAipLayer = L.layerGroup();
+    }
 
-    items.forEach(a=>{
-        if(!a.geometry?.coordinates) return;
+    openAipLayer.clearLayers();
 
-        features.push({
-            type:"Feature",
-            geometry:a.geometry,
-            properties:{
-                name:a.name,
-                class:a.airspaceClass,
-                type:a.type,
-                lower:a.lowerLimit?.value || "",
-                upper:a.upperLimit?.value || ""
-            }
-        });
-    });
-
-    const layer = L.geoJSON({
+    const geo = L.geoJSON({
         type:"FeatureCollection",
-        features
+        features: items
+            .filter(a => a.geometry?.coordinates)
+            .map(a => ({
+                type:"Feature",
+                geometry:a.geometry,
+                properties:{
+                    name:a.name,
+                    class:a.airspaceClass,
+                    lower:a.lowerLimit?.value || "",
+                    upper:a.upperLimit?.value || ""
+                }
+            }))
     },{
         pane:"zonesPane",
         style:getAirspaceStyle,
         onEachFeature:bindAirspacePopup
     });
 
-    // injecte dans le layerGroup du map.js
-    if(typeof window.setOpenAIPLayer === "function"){
-        window.setOpenAIPLayer(layer);
+    openAipLayer.addLayer(geo);
+
+    // injecte dans map.js
+    if(typeof setOpenAIPLayer === "function"){
+        setOpenAIPLayer(openAipLayer);
     }else{
-        layer.addTo(window.map);
+        openAipLayer.addTo(map);
     }
 }
+
 
 
 // =============================

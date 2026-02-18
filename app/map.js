@@ -31,12 +31,16 @@ async function initMap(){ // Ajout de async pour le chargement des zones
 
     window.map = map;
 
-    // ================= PANE PRIORITÉ ZONES =================
+   // ================= PANE PRIORITÉ ZONES =================
 
-    if(!map.getPane("zonesPane")){
-        map.createPane("zonesPane");
-        map.getPane("zonesPane").style.zIndex = 650;
-    }
+if (!map.getPane("zonesPane")) {
+    map.createPane("zonesPane");
+
+    const pane = map.getPane("zonesPane");
+
+    pane.style.zIndex = 650;           // au-dessus des tiles
+    pane.style.pointerEvents = "auto"; // 🔥 autorise clics / hover
+}
 
     // ================= FOND OSM (toujours safe)
 

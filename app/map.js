@@ -10,9 +10,6 @@ let positionMarker = null;
 let osmLayer = null;
 let oaciLayer = null;
 
-
-// ================= INIT MAP =================
-
 async function initMap() {
 
     if (!document.getElementById("map")) return;
@@ -30,88 +27,83 @@ async function initMap() {
 
     window.map = map;
 
-    // ================= PANE DGAC VECTEUR =================
+    // ================= PANES ORDER =================
 
-    if (!map.getPane("zonesPane")) {
-        map.createPane("zonesPane");
-        map.getPane("zonesPane").style.zIndex = 650;
-    }
+    map.createPane("osmPane");
+    map.getPane("osmPane").style.zIndex = 200;
 
-    // ================= FOND OSM =================
+    map.createPane("oaciPane");
+    map.getPane("oaciPane").style.zIndex = 300;
+
+    map.createPane("dgacWmtsPane");
+    map.getPane("dgacWmtsPane").style.zIndex = 400;
+
+    map.createPane("zonesPane"); // DGAC vecteur cliquable
+    map.getPane("zonesPane").style.zIndex = 650;
+    map.getPane("zonesPane").style.pointerEvents = "auto";
+
+    map.createPane("openAipPane");
+    map.getPane("openAipPane").style.zIndex = 700;
+
+    // ================= OSM =================
 
     osmLayer = L.tileLayer(
         "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
         {
-            maxZoom: 19,
-            attribution: "© OpenStreetMap"
+            pane:"osmPane",
+            maxZoom:19,
+            attribution:"© OpenStreetMap"
         }
     ).addTo(map);
 
-    // ================= IGN OACI =================
+    // ================= OACI =================
 
-    try {
-        oaciLayer = L.tileLayer(
-            "https://data.geopf.fr/private/tms/1.0.0/" +
-            "GEOGRAPHICALGRIDSYSTEMS.MAPS.SCAN-OACI/{z}/{x}/{y}.jpeg" +
-            "?apikey=essentiels",
-            {
-                opacity: 0.7,
-                maxZoom: 16,
-                attribution: "© IGN"
-            }
-        ).addTo(map);
-    } catch(e){
-        console.warn("OACI indisponible", e);
-    }
+    oaciLayer = L.tileLayer(
+        "https://data.geopf.fr/private/tms/1.0.0/" +
+        "GEOGRAPHICALGRIDSYSTEMS.MAPS.SCAN-OACI/{z}/{x}/{y}.jpeg" +
+        "?apikey=8Y5CE2vg2zJMePOhqeHYhXx4fmI3uzpz",
+        {
+            pane:"oaciPane",
+            opacity:0.7,
+            maxZoom:16,
+            attribution:"© IGN OACI"
+        }
+    ).addTo(map);
 
-    // ================= OPENAIP =================
+    // ================= DGAC WMTS (visuel global France) =================
+    // ⚠️ nécessite vraie clé IGN
+
+    const DGAC_KEY = "TA_CLE_IGN"; // ← remplace
+
+    window.dgacWmtsLayer = L.tileLayer(
+        `https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0` +
+        `&LAYER=DGAC_RESTRICTIONS-UAS&STYLE=normal&TILEMATRIXSET=PM` +
+        `&FORMAT=image/png&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}` +
+        `&apikey=${DGAC_KEY}`,
+        {
+            pane:"dgacWmtsPane",
+            opacity:0.5
+        }
+    ).addTo(map);
+
+    // ================= OPENAIP CONTAINER =================
 
     window.openAipLayer = L.layerGroup().addTo(map);
 
-    // ================= DGAC WMTS (affichage global France) =================
+    // ================= DGAC VECTEUR CLIQUABLE =================
 
-    let dgacWmtsLayer = null;
+    let dgacVector = null;
 
-    try {
-        dgacWmtsLayer = L.tileLayer(
-            "https://data.geopf.fr/wmts?" +
-            "SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0" +
-            "&LAYER=TRANSPORTS.DRONES.RESTRICTIONS" +
-            "&STYLE=normal" +
-            "&TILEMATRIXSET=PM" +
-            "&FORMAT=image/png" +
-            "&TILEMATRIX={z}" +
-            "&TILEROW={y}" +
-            "&TILECOL={x}" +
-            "&apikey=essentiels",
-            {
-                opacity: 0.55,
-                attribution: "DGAC / IGN",
-                crossOrigin: true
-            }
-        ).addTo(map);
-    } catch(e){
-        console.warn("DGAC WMTS error", e);
-    }
+    if (window.loadDGACZones) {
+        dgacVector = await window.loadDGACZones();
 
-    // ================= DGAC VECTEUR (clic + altitude) =================
-
-    let dgacVectorLayer = null;
-
-    if (typeof window.loadDGACZones === "function") {
-        try {
-            dgacVectorLayer = await window.loadDGACZones();
-
-            if (dgacVectorLayer) {
-                dgacVectorLayer.addTo(map);
-                console.log("✅ DGAC vecteur chargé");
-            }
-        } catch(e){
-            console.warn("DGAC vector error", e);
+        if (dgacVector) {
+            dgacVector.addTo(map);
+            console.log("✅ DGAC vecteur chargé");
         }
     }
 
-    // ================= CONTROLE COUCHES =================
+    // ================= LAYER CONTROL =================
 
     const baseMaps = {
         "Fond OSM": osmLayer
@@ -119,29 +111,23 @@ async function initMap() {
 
     const overlays = {
         "Carte OACI IGN": oaciLayer,
+        "DGAC Global": window.dgacWmtsLayer,
+        "DGAC Cliquable": dgacVector,
         "Espaces aériens OpenAIP": window.openAipLayer
     };
 
-    if (dgacWmtsLayer)
-        overlays["DGAC Officiel (WMTS)"] = dgacWmtsLayer;
+    L.control.layers(baseMaps, overlays, {collapsed:false}).addTo(map);
 
-    if (dgacVectorLayer)
-        overlays["DGAC Dynamique (clic)"] = dgacVectorLayer;
-
-    L.control.layers(baseMaps, overlays, {
-        collapsed: false
-    }).addTo(map);
-
-    // ================= AUTO OPENAIP =================
+    // ================= OPENAIP INIT =================
 
     setTimeout(() => {
-        if (typeof initOpenAIPAutoUpdate === "function") {
-            initOpenAIPAutoUpdate();
-        }
+        if(window.initOpenAIPAutoUpdate) initOpenAIPAutoUpdate();
     }, 500);
 
     console.log("✅ MAP READY");
 }
+
+
 
 
 // ================= UPDATE POSITION =================

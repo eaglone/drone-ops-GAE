@@ -48,18 +48,26 @@ async function initRainRadar(){
             return rainRadarLayer;
         }
 
-        rainRadarLayer = L.tileLayer(
-            buildRadarURL(radarFrames[0].path),
-            {
-                opacity: 0.6,
-                pane: "weatherPane",
-                maxNativeZoom: 10,
-                maxZoom: 18,
-                updateWhenIdle: true,
-                keepBuffer: 4,
-                attribution: "© RainViewer"
-            }
-        );
+       rainRadarLayer = L.tileLayer(
+    buildRadarURL(radarFrames[0].path),
+    {
+        opacity: 0.65,
+        pane: "weatherPane",
+
+        // ⭐ améliore rendu zoom
+        maxNativeZoom: 10,   // résolution réelle radar
+        maxZoom: 18,         // zoom carte possible
+        keepBuffer: 6,       // évite disparition
+        updateWhenZooming: false,
+        updateWhenIdle: true,
+
+        // rendu plus net
+        detectRetina: true,
+
+        attribution: "© RainViewer"
+    }
+);
+
 
         startRadarAnimation();
 

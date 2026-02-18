@@ -139,8 +139,10 @@ async function loadDGACZones() {
 dgacLayer = L.geoJSON(null, {
     pane: "zonesPane",
     style: dgacStyle,
-    onEachFeature: onEachDGACFeature
+    onEachFeature: onEachDGACFeature,
+    interactive: true   // 🔥 IMPORTANT
 });
+
 
 // CACHE FIRST
 const cached = await window.loadDGAC?.();

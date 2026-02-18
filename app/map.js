@@ -1,13 +1,14 @@
 /**
  * MAP.JS — Drone OPS Tactical Map
- * VERSION PRO STABLE
+ * VERSION PRO STABLE — PRODUCTION READY
  *
  * ORDRE COUCHES :
  * 1. OSM (fond)
  * 2. OACI IGN
- * 3. DGAC vecteur
- * 4. Radar météo
- * 5. OpenAIP (top)
+ * 3. DGAC officiel IGN
+ * 4. DGAC vecteur cliquable (option)
+ * 5. Radar météo animé
+ * 6. OpenAIP (top)
  */
 
 let map = null;
@@ -17,12 +18,17 @@ let osmLayer = null;
 let oaciLayer = null;
 let rainRadarLayer = null;
 
+// radar animation state
+let radarFrames = [];
+let radarIndex = 0;
+let radarTimer = null;
 
-// ================= RADAR PLUIE ANIMÉ PRO =================
+
+// =====================================================
+// RADAR PLUIE ANIMÉ PRO
+// =====================================================
 
 async function initRainRadar(){
-
-    if(rainRadarLayer) return rainRadarLayer;
 
     console.log("🌧️ Init Rain Radar PRO");
 
@@ -30,21 +36,27 @@ async function initRainRadar(){
         const res = await fetch("https://api.rainviewer.com/public/weather-maps.json");
         const data = await res.json();
 
-        // dernières 8 frames pour animation fluide
         radarFrames = data?.radar?.past?.slice(-8) || [];
 
         if(!radarFrames.length){
             throw new Error("Pas de frame radar");
         }
 
+        // déjà créé → reset animation seulement
+        if(rainRadarLayer){
+            radarIndex = 0;
+            return rainRadarLayer;
+        }
+
         rainRadarLayer = L.tileLayer(
             buildRadarURL(radarFrames[0].path),
             {
-                opacity: 0.65,
-                pane: "airspacePane",
-                maxZoom: 12,          // empêche disparition zoom
-                updateWhenZooming: false,
+                opacity: 0.6,
+                pane: "weatherPane",
+                maxNativeZoom: 10,
+                maxZoom: 18,
                 updateWhenIdle: true,
+                keepBuffer: 4,
                 attribution: "© RainViewer"
             }
         );
@@ -69,23 +81,21 @@ function startRadarAnimation(){
 
     radarTimer = setInterval(()=>{
 
-        radarIndex++;
-        if(radarIndex >= radarFrames.length){
-            radarIndex = 0;
-        }
+        if(!radarFrames.length || !rainRadarLayer) return;
 
-        if(rainRadarLayer){
-            rainRadarLayer.setUrl(
-                buildRadarURL(radarFrames[radarIndex].path)
-            );
-        }
+        radarIndex = (radarIndex + 1) % radarFrames.length;
 
-    }, 600); // vitesse animation (ms)
+        rainRadarLayer.setUrl(
+            buildRadarURL(radarFrames[radarIndex].path)
+        );
+
+    }, 700);
 }
 
 
-
-// ================= INIT MAP =================
+// =====================================================
+// INIT MAP
+// =====================================================
 
 async function initMap(){
 
@@ -105,22 +115,19 @@ async function initMap(){
     window.map = map;
 
 
-    // ================= PANES (ordre rendu) =================
+    // ================= PANES (ordre rendu)
 
-    // DGAC vecteur
     map.createPane("zonesPane");
     map.getPane("zonesPane").style.zIndex = 650;
 
-    // météo (entre DGAC et airspace)
     map.createPane("weatherPane");
     map.getPane("weatherPane").style.zIndex = 675;
 
-    // OpenAIP top
     map.createPane("airspacePane");
     map.getPane("airspacePane").style.zIndex = 700;
 
 
-    // ================= OSM =================
+    // ================= OSM BASE
 
     osmLayer = L.tileLayer(
         "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -131,7 +138,7 @@ async function initMap(){
     ).addTo(map);
 
 
-    // ================= OACI IGN =================
+    // ================= OACI IGN
 
     oaciLayer = L.tileLayer(
         "https://data.geopf.fr/private/wmts?" +
@@ -150,7 +157,7 @@ async function initMap(){
     ).addTo(map);
 
 
-    // ================= DGAC IGN OFFICIEL =================
+    // ================= DGAC IGN OFFICIEL
 
     const dgacIgnLayer = L.tileLayer(
         "https://data.geopf.fr/wmts?" +
@@ -167,14 +174,14 @@ async function initMap(){
     );
 
 
-    // ================= OPENAIP =================
+    // ================= OPENAIP
 
     window.openAipLayer = L.layerGroup([],{
         pane:"airspacePane"
     }).addTo(map);
 
 
-    // ================= DGAC VECTEUR =================
+    // ================= DGAC VECTEUR (optionnel)
 
     let dgacLayer = null;
 
@@ -188,12 +195,12 @@ async function initMap(){
     }
 
 
-    // ================= RADAR =================
+    // ================= RADAR METEO
 
     const radarLayer = await initRainRadar();
 
 
-    // ================= CONTROLE COUCHES =================
+    // ================= CONTROLE COUCHES
 
     const baseMaps = {
         "Fond OSM": osmLayer
@@ -206,11 +213,11 @@ async function initMap(){
     };
 
     if(radarLayer){
-        overlays["Radar pluie"] = radarLayer;
+        overlays["Radar pluie animé"] = radarLayer;
     }
 
     if(dgacLayer){
-        overlays["DGAC Zones cliquables (avancé)"] = dgacLayer;
+        overlays["DGAC Zones cliquables"] = dgacLayer;
     }
 
     L.control.layers(baseMaps, overlays, {
@@ -218,19 +225,17 @@ async function initMap(){
     }).addTo(map);
 
 
-    // ================= AUTO REFRESH RADAR =================
+    // ================= AUTO REFRESH RADAR (5 min)
 
     setInterval(async ()=>{
-        if(!rainRadarLayer) return;
-
-        const newLayer = await initRainRadar();
-        if(newLayer){
-            rainRadarLayer.setUrl(newLayer._url);
-        }
-    }, 300000); // 5 min
+        console.log("🔄 refresh radar");
+        radarFrames = [];
+        radarIndex = 0;
+        await initRainRadar();
+    }, 300000);
 
 
-    // ================= INIT OPENAIP =================
+    // ================= INIT OPENAIP
 
     setTimeout(()=>{
         if(typeof initOpenAIPAutoUpdate === "function"){
@@ -242,7 +247,9 @@ async function initMap(){
 }
 
 
-// ================= UPDATE POSITION =================
+// =====================================================
+// UPDATE POSITION
+// =====================================================
 
 function updateMapPosition(lat,lon){
 
@@ -267,7 +274,9 @@ function updateMapPosition(lat,lon){
 }
 
 
-// ================= OPENAIP SUPPORT =================
+// =====================================================
+// OPENAIP SUPPORT
+// =====================================================
 
 function setOpenAIPLayer(layer){
 
@@ -283,7 +292,9 @@ function setOpenAIPLayer(layer){
 }
 
 
-// ================= EXPORT =================
+// =====================================================
+// EXPORT GLOBAL
+// =====================================================
 
 window.initMap = initMap;
 window.updateMapPosition = updateMapPosition;

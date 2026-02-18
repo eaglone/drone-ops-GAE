@@ -55,32 +55,40 @@ async function initMap() {
             attribution:"© OpenStreetMap"
         }
     ).addTo(map);
+// ===============================
+// ⭐ FOND OACI IGN (WMTS OFFICIEL)
+// ===============================
 
-    // ================= OACI =================
-// ================= OACI =================
-
-try {
-
-    oaciLayer = L.tileLayer(
-        "https://data.geopf.fr/private/tms/1.0.0/" +
-        "GEOGRAPHICALGRIDSYSTEMS.MAPS.SCAN-OACI/{z}/{x}/{y}.jpeg" +
-        "?apikey=8Y5CE2vg2zJMePOhqeHYhXx4fmI3uzpz",
-        {
-            pane: "oaciPane",
-            opacity: 0.7,
-            maxZoom: 16,
-            attribution: "© IGN OACI"
-        }
-    );
-
-    // 🔥 IMPORTANT — ajouter explicitement
-    oaciLayer.addTo(map);
-
-    console.log("✅ OACI chargé");
-
-} catch (e) {
-    console.warn("❌ OACI non disponible", e);
+// pane dédié
+if (!map.getPane("oaciPane")) {
+    map.createPane("oaciPane");
+    map.getPane("oaciPane").style.zIndex = 300; // sous DGAC / OpenAIP
 }
+
+const oaciLayer = L.tileLayer(
+  "https://data.geopf.fr/private/wmts?" +
+  "SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0" +
+  "&LAYER=GEOGRAPHICALGRIDSYSTEMS.MAPS.SCAN-OACI" +
+  "&STYLE=normal" +
+  "&TILEMATRIXSET=PM" +
+  "&FORMAT=image/jpeg" +
+  "&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}" +
+  "&apikey=8Y5CE2vg2zJMePOhqeHYhXx4fmI3uzpz",
+  {
+    pane: "oaciPane",
+    attribution: "© IGN — Carte OACI",
+    maxZoom: 18,
+    minZoom: 5,
+    tileSize: 256,
+    crossOrigin: true
+  }
+);
+
+// actif par défaut
+oaciLayer.addTo(map);
+
+console.log("✅ OACI IGN chargé");
+
 
 
     // ================= DGAC WMTS (visuel global France) =================

@@ -68,6 +68,19 @@ async function initMap() {
     catch (e) {
         console.warn("OACI non disponible");
     }
+map.on("zoomend", () => {
+
+    const z = map.getZoom();
+
+    if (z < 8) {
+        if (window.dgacLayer) window.dgacLayer.clearLayers();
+        return;
+    }
+
+    if (typeof loadDGACForBounds === "function") {
+        loadDGACForBounds();
+    }
+});
 
     // ================= OPENAIP LAYER =================
 

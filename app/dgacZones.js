@@ -1,5 +1,8 @@
 /**
- * DGACZONES.JS — DGAC France entière optimisé
+ * DGACZONES.JS — DGAC dynamique autour de la carte
+ * - chargement bbox carte
+ * - mise à jour automatique
+ * - clic zone
  */
 
 let dgacLayer = null;
@@ -7,42 +10,6 @@ let selectedLayer = null;
 
 const WFS_URL = "https://data.geopf.fr/wfs/ows";
 const TYPE_NAME = "TRANSPORTS.DRONES.RESTRICTIONS:carte_restriction_drones_lf";
-const PAGE_SIZE = 5000;
-
-
-// ================= FETCH WFS =================
-
-async function fetchAllDGACFeaturesProgressive(onBatch) {
-
-    let startIndex = 0;
-
-    while (true) {
-
-        console.log("📡 WFS batch", startIndex);
-
-        const url =
-            `${WFS_URL}?service=WFS&version=2.0.0&request=GetFeature` +
-            `&typeName=${TYPE_NAME}` +
-            `&outputFormat=application/json` +
-            `&srsName=EPSG:4326` +
-            `&count=${PAGE_SIZE}&startIndex=${startIndex}`;
-
-        const res = await fetch(url);
-        if (!res.ok) throw new Error("Erreur WFS");
-
-        const data = await res.json();
-        if (!data.features?.length) break;
-
-        onBatch({
-            type: "FeatureCollection",
-            features: data.features
-        });
-
-        if (data.features.length < PAGE_SIZE) break;
-
-        startIndex += PAGE_SIZE;
-    }
-}
 
 
 // ================= STYLE =================
@@ -86,7 +53,7 @@ function onEachDGACFeature(feature, layer) {
     layer.on("click", e => {
 
         if (selectedLayer) {
-            selectedLayer.setStyle(dgacStyle(feature));
+            selectedLayer.setStyle(dgacStyle(selectedLayer.feature));
         }
 
         selectedLayer = layer;
@@ -103,7 +70,10 @@ function onEachDGACFeature(feature, layer) {
             .openOn(window.map);
     });
 }
-// ================= Bounds =================
+
+
+// ================= LOAD BBOX =================
+
 async function loadDGACForBounds() {
 
     if (!window.map || !dgacLayer) return;
@@ -119,36 +89,35 @@ async function loadDGACForBounds() {
 
     console.log("📦 DGAC bbox:", bbox);
 
-    const url =
-        `${WFS_URL}?service=WFS&version=2.0.0&request=GetFeature` +
-        `&typeName=${TYPE_NAME}` +
-        `&outputFormat=application/json` +
-        `&srsName=EPSG:4326` +
-        `&bbox=${bbox},EPSG:4326`;
+    try {
 
-    const res = await fetch(url);
-    const data = await res.json();
+        const url =
+            `${WFS_URL}?service=WFS&version=2.0.0&request=GetFeature` +
+            `&typeName=${TYPE_NAME}` +
+            `&outputFormat=application/json` +
+            `&srsName=EPSG:4326` +
+            `&bbox=${bbox},EPSG:4326`;
 
-    dgacLayer.clearLayers();
-    dgacLayer.addData(data);
+        const res = await fetch(url);
+        const data = await res.json();
+
+        dgacLayer.clearLayers();
+        dgacLayer.addData(data);
+
+    } catch (err) {
+        console.warn("DGAC bbox error", err);
+    }
 }
 
 
-// ================= LOAD DGAC =================
+// ================= INIT DGAC =================
 
 async function loadDGACZones() {
-    // recharge quand la carte bouge
-window.map.on("moveend", loadDGACForBounds);
-
-// premier chargement
-await loadDGACForBounds();
-
 
     if (dgacLayer) return dgacLayer;
-
     if (!window.map) return null;
 
-    console.log("🛰️ Chargement DGAC...");
+    console.log("🛰️ Initialisation DGAC dynamique...");
 
     dgacLayer = L.geoJSON(null, {
         pane: "zonesPane",
@@ -157,26 +126,11 @@ await loadDGACForBounds();
         interactive: true
     });
 
-    // cache
-    const cached = await window.loadDGAC?.();
+    // recharge quand la carte bouge
+    window.map.on("moveend", loadDGACForBounds);
 
-    if (cached) {
-        console.log("⚡ DGAC cache");
-        dgacLayer.addData(cached);
-        return dgacLayer;
-    }
-
-    // worker
-    const worker = new Worker("app/dgacWorkers.js");
-
-    worker.onmessage = e => {
-        dgacLayer.addData(e.data);
-        window.saveDGAC?.(e.data);
-    };
-
-    await fetchAllDGACFeaturesProgressive(batch => {
-        worker.postMessage(batch);
-    });
+    // premier chargement
+    await loadDGACForBounds();
 
     return dgacLayer;
 }

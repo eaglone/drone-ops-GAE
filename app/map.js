@@ -53,23 +53,36 @@ async function initMap() {
 
     // ================= DGAC WMTS (FRANCE COMPLETE) =================
     // affichage global ultra rapide
+// ================= DGAC WMTS OFFICIEL =================
 
-  dgacWmtsLayer = L.tileLayer(
-    "https://data.geopf.fr/wmts?" +
-    "SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0" +
-    "&LAYER=DGAC_RESTRICTIONS-UAS" +
-    "&STYLE=normal" +
-    "&TILEMATRIXSET=PM" +
-    "&FORMAT=image/png" +
-    "&TILEMATRIX={z}" +
-    "&TILEROW={y}" +
-    "&TILECOL={x}",
-    {
-        opacity: 0.55,
-        crossOrigin: true,   // 🔥 IMPORTANT
-        referrerPolicy: "no-referrer"
-    }
-);
+let dgacWmtsLayer = null;
+
+try {
+
+    dgacWmtsLayer = L.tileLayer(
+        "https://data.geopf.fr/wmts?" +
+        "SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0" +
+        "&LAYER=DGAC_RESTRICTIONS-UAS" +
+        "&STYLE=normal" +
+        "&TILEMATRIXSET=PM" +
+        "&FORMAT=image/png" +
+        "&TILEMATRIX={z}" +
+        "&TILEROW={y}" +
+        "&TILECOL={x}" +
+        "&apikey=essentiels",   // ⭐ CRUCIAL
+        {
+            opacity: 0.6,
+            attribution: "DGAC / IGN",
+            crossOrigin: "anonymous"
+        }
+    );
+
+    dgacWmtsLayer.addTo(map);
+
+} catch(e){
+    console.warn("DGAC WMTS error", e);
+}
+
 
 
     // ================= DGAC VECTEUR CLIQUABLE =================

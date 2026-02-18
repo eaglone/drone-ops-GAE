@@ -5,7 +5,10 @@
 
 const OPENAIP_KEY = "db8fd47e611ac318fc7716c10311d4f2";
 
-let openAipLayer = null;
+if(typeof openAipLayer === "undefined"){
+    openAipLayer = null;
+}
+
 let lastFetchPosition = null;
 
 

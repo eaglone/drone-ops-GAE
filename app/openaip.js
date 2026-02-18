@@ -1,15 +1,13 @@
 /**
  * OPENAIP.JS — Aviation Airspaces Overlay
- * Version OPS production / ICAO
+ * Version OPS production stable
+ * Compatible MAP.JS layer control
  */
 
 const OPENAIP_KEY = "db8fd47e611ac318fc7716c10311d4f2";
 
-if(typeof openAipLayer === "undefined"){
-    openAipLayer = null;
-}
-
 let lastFetchPosition = null;
+let fetchInProgress = false;
 
 
 // =============================
@@ -19,6 +17,7 @@ let lastFetchPosition = null;
 async function loadOpenAIPAirspaces(lat, lon){
 
     if(!window.map || !lat || !lon) return;
+    if(fetchInProgress) return;
 
     // éviter reload si déplacement < 5km
     if(lastFetchPosition){
@@ -30,6 +29,7 @@ async function loadOpenAIPAirspaces(lat, lon){
         if(d < 5) return;
     }
 
+    fetchInProgress = true;
     lastFetchPosition = {lat, lon};
 
     try{
@@ -54,19 +54,19 @@ async function loadOpenAIPAirspaces(lat, lon){
     }catch(e){
         console.error("OpenAIP error:", e);
     }
+    finally{
+        fetchInProgress = false;
+    }
 }
 
 
 // =============================
-// RENDER MAP (compatible checkbox)
+// RENDER MAP
 // =============================
 
 function renderAirspaces(items){
 
-    // supprimer ancienne couche
-    if(openAipLayer){
-        openAipLayer.clearLayers();
-    }
+    if(!window.map) return;
 
     const features = [];
 
@@ -86,7 +86,7 @@ function renderAirspaces(items){
         });
     });
 
-    openAipLayer = L.geoJSON({
+    const layer = L.geoJSON({
         type:"FeatureCollection",
         features
     },{
@@ -95,11 +95,11 @@ function renderAirspaces(items){
         onEachFeature:bindAirspacePopup
     });
 
-    // 👉 IMPORTANT : on injecte dans map.js
-    if(typeof setOpenAIPLayer === "function"){
-        setOpenAIPLayer(openAipLayer);
+    // injecte dans le layerGroup du map.js
+    if(typeof window.setOpenAIPLayer === "function"){
+        window.setOpenAIPLayer(layer);
     }else{
-        openAipLayer.addTo(map);
+        layer.addTo(window.map);
     }
 }
 
@@ -110,7 +110,7 @@ function renderAirspaces(items){
 
 function getAirspaceStyle(feature){
 
-    const zoom = map.getZoom();
+    const zoom = window.map.getZoom();
     const c = feature.properties.class;
 
     let opacity = 0.03;
@@ -135,7 +135,7 @@ function getAirspaceStyle(feature){
 
 
 // =============================
-// POPUP STYLE OACI
+// POPUP ICAO
 // =============================
 
 function bindAirspacePopup(feature, layer){
@@ -158,10 +158,8 @@ function bindAirspacePopup(feature, layer){
 // =============================
 
 function buildBBoxKm(lat, lon, km){
-
     const latDiff = km / 111;
     const lonDiff = km / (111 * Math.cos(lat*Math.PI/180));
-
     return [
         lon-lonDiff,
         lat-latDiff,
@@ -176,7 +174,6 @@ function buildBBoxKm(lat, lon, km){
 // =============================
 
 function distanceKm(lat1,lon1,lat2,lon2){
-
     const R=6371;
     const dLat=(lat2-lat1)*Math.PI/180;
     const dLon=(lon2-lon1)*Math.PI/180;
@@ -192,15 +189,15 @@ function distanceKm(lat1,lon1,lat2,lon2){
 
 
 // =============================
-// AUTO UPDATE POSITION MAP
+// AUTO UPDATE MAP
 // =============================
 
 function initOpenAIPAutoUpdate(){
 
     if(!window.map) return;
 
-    map.on("moveend",()=>{
-        const c = map.getCenter();
+    window.map.on("moveend",()=>{
+        const c = window.map.getCenter();
         loadOpenAIPAirspaces(c.lat, c.lng);
     });
 }

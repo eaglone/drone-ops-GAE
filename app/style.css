@@ -1,0 +1,364 @@
+/* --- VARIABLES TACTIQUES --- */
+:root {
+    --bg-dark: #020617;
+    --panel: #0f172a;
+    --accent: #38bdf8;
+    --border: rgba(56, 189, 248, 0.2);
+    --text: #f8fafc;
+    --red: #f43f5e;
+    --green: #10b981;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    background: var(--bg-dark);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; /* Fixe l'écran */
+}
+/* ===== POPUP STYLE OACI ===== */
+
+.leaflet-popup-content-wrapper{
+    background:#0f172a;
+    color:white;
+    border-radius:10px;
+    box-shadow:0 0 20px rgba(0,0,0,0.6);
+    border:1px solid #1e293b;
+}
+
+.leaflet-popup-tip{
+    background:#0f172a;
+}
+
+.oaci-popup{
+    font-family: "JetBrains Mono", monospace;
+    min-width:220px;
+}
+
+.oaci-title{
+    font-weight:700;
+    font-size:14px;
+    margin-bottom:6px;
+}
+
+.oaci-status{
+    display:inline-block;
+    padding:3px 8px;
+    border-radius:4px;
+    font-size:12px;
+    font-weight:700;
+    margin-bottom:6px;
+}
+
+.oaci-red{
+    background:#ef4444;
+}
+
+.oaci-orange{
+    background:#f59e0b;
+}
+
+.oaci-green{
+    background:#22c55e;
+}
+
+.oaci-message{
+    font-size:12px;
+    opacity:.9;
+}
+
+/* --- HEADER --- */
+.tactical-header {
+    height: 60px;
+    border-bottom: 2px solid var(--accent);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 20px;
+    background: #010409;
+    flex-shrink: 0;
+}
+
+.logo-zone h1 { font-size: 1.1rem; letter-spacing: 2px; margin: 0; }
+.logo-zone span { color: var(--accent); font-weight: 300; }
+
+/* --- CONTENEUR PRINCIPAL --- */
+.dashboard {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 15px;
+    gap: 15px;
+    min-height: 0; /* Important pour le scroll interne */
+}
+
+/* Barre de recherche et Drone */
+.search-area {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 15px;
+    flex-shrink: 0;
+}
+
+.glass-input {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    padding: 0 15px;
+    position: relative;
+}
+
+.glass-input input, .glass-input select {
+    background: transparent;
+    border: none;
+    color: white;
+    height: 45px;
+    width: 100%;
+    outline: none;
+}
+
+/* --- LA GRILLE MAGIQUE : 3 Colonnes alignées --- */
+.main-grid {
+    display: grid;
+    /* Carte 1 (auto), Carte 2 (auto), Colonne Data (fixe 380px) */
+    grid-template-columns: 1fr 1fr 380px; 
+    gap: 15px;
+    flex: 1;
+    min-height: 0; /* Empêche le contenu de pousser la grille vers le bas */
+}
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    min-height: 0;
+}
+
+iframe {
+    flex: 1; /* Les iFrames prennent toute la hauteur du panel */
+    width: 100%;
+    border: none;
+    background: #000;
+}
+
+.data-column {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+}
+
+.scroll-box {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 5px; /* Évite que le scroll cache le texte */
+}
+
+/* Petits titres internes pour la colonne de droite */
+.panel-header-mini {
+    font-size: 0.65rem;
+    font-weight: bold;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin: 15px 0 8px 0;
+    letter-spacing: 1px;
+}
+
+/* Responsivité : si l'écran est trop petit, on repasse sur une colonne */
+@media (max-width: 1100px) {
+    .main-grid {
+        grid-template-columns: 1fr;
+        overflow-y: auto;
+    }
+    body { overflow-y: auto; }
+}
+
+/* --- ÉLÉMENTS DE DONNÉES --- */
+.decision-box {
+    padding: 15px;
+    text-align: center;
+    font-weight: 900;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+.decision-box.ok { background: rgba(16, 185, 129, 0.1); border: 1px solid var(--green); color: var(--green); }
+.decision-box.danger { background: rgba(244, 63, 94, 0.1); border: 1px solid var(--red); color: var(--red); }
+
+.scroll-box {
+    flex: 1;
+    overflow-y: auto; /* Seule cette partie défile */
+    padding: 10px;
+    background: rgba(0,0,0,0.2);
+    border: 1px solid var(--border);
+}
+
+.meteo-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 15px;
+}
+
+.stat-tile {
+    background: rgba(255,255,255,0.03);
+    padding: 10px;
+    text-align: center;
+    border: 1px solid var(--border);
+}
+
+.stat-tile b { display: block; font-size: 1.1rem; color: var(--accent); }
+.stat-tile span { font-size: 0.6rem; opacity: 0.6; }
+
+.check-item {
+    font-size: 0.75rem;
+    padding: 8px;
+    border-left: 3px solid var(--accent);
+    background: rgba(255,255,255,0.02);
+    margin-bottom: 5px;
+    display: flex;
+    gap: 10px;
+}
+/* --- TACTICAL HEADER --- */
+.tactical-header {
+    height: 70px;
+    background: #010409;
+    border-bottom: 2px solid var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: space-between; /* Écarte les 3 blocs */
+    padding: 0 30px;
+    flex-shrink: 0;
+}
+
+/* On force les blocs latéraux à prendre la même largeur pour que le centre soit VRAIMENT au milieu */
+.header-left, .header-right {
+    flex: 1; 
+}
+
+.header-right {
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* BLOC CENTRAL DES HORLOGES */
+.header-center {
+    flex: 2; /* Plus d'espace pour le centre */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 40px;
+}
+
+.clock-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.clock-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 1px;
+}
+
+.clock-separator {
+    height: 30px;
+    width: 1px;
+    background: var(--border);
+}
+
+.label {
+    font-size: 0.6rem;
+    color: var(--accent);
+    font-weight: 800;
+    letter-spacing: 2px;
+    margin-bottom: 2px;
+}
+
+/* --- LA GRILLE DES CARTES (CÔTE À CÔTE) --- */
+.main-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 380px; /* Aligne Carte 1, Carte 2, Data */
+    gap: 15px;
+    flex: 1;
+    min-height: 0;
+}
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+iframe {
+    flex: 1;
+    border: none;
+    width: 100%;
+    background: #000;
+}
+.forecast-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.forecast-slot {
+    background: rgba(255,255,255,0.05);
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+}
+
+.forecast-slot.ok {
+    border-left: 4px solid #22c55e;
+}
+
+.forecast-slot.warning {
+    border-left: 4px solid #f59e0b;
+}
+
+#map {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+}
+
+.forecast-slot.danger {
+    border-left: 4px solid #ef4444;
+}
+
+.forecast-slot h4 {
+    margin: 0 0 6px;
+    font-size: 0.9rem;
+}
+
+/* Barre de progression en bas */
+.bottom-bar { height: 4px; background: rgba(255,255,255,0.05); }
+.progress { height: 100%; background: var(--accent); width: 100%; transition: width 1s linear; }
+
+/* Suggestions Autocomplete */
+.suggestions-box {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--panel);
+    border: 1px solid var(--accent);
+    z-index: 1000;
+    display: none;
+}

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DRONE OPS – Tactical Dashboard</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app/style.css">
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+</head>
+
+<body>
+
+    <header class="tactical-header">
+        <div class="header-left">
+            <div class="logo-zone"><h1>DRONE OPS <span>GAE</span></h1></div>
+        </div>
+
+        <div class="header-center">
+            <div class="clock-block">
+                <span class="label">LOCAL TIME</span>
+                <span id="clockLocal" class="clock-val">--:--:--</span>
+            </div>
+            <div class="clock-separator"></div>
+            <div class="clock-block">
+                <span class="label">ZULU TIME</span>
+                <span id="clockUTC" class="clock-val">--:--:--Z</span>
+            </div>
+        </div>
+        
+        <div class="header-right">
+            <div class="status-item">
+                <span class="label">REFRESH</span>
+                <span id="updateTimerLabel">15:00</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="dashboard">
+        <section class="search-area">
+            <div class="glass-input">
+                <input type="text" id="addressInput" placeholder="ZONE D'OPÉRATION..." autocomplete="off">
+                <button id="geoBtn">📍</button>
+                <div id="suggestions" class="suggestions-box"></div>
+            </div>
+            <div class="glass-input">
+                <select id="droneType">
+                    <option value="mini">DJI Mini 3/4 Pro</option>
+                    <option value="mavic2">DJI Mavic 2 EA</option>
+                    <option value="matrice30" selected>DJI Matrice 30T</option>
+                    <option value="matrice4">DJI Matrice 4 E/T</option>
+                </select>
+            </div>
+        </section>
+        <div class="main-grid">
+           <section class="panel">
+  <div class="panel-header">Carte OACI</div>
+  <div id="map"></div>
+</section>
+            <section class="panel">
+                <div class="panel-header">Radar Précipitations</div>
+                <iframe id="radarFrame" src=""></iframe>
+            </section>
+
+            <aside class="data-column">
+                <div id="decision" class="decision-box">ANALYSE EN COURS...</div>
+                <div class="scroll-box">
+                    <div id="safety-alerts"></div>
+                    <div class="panel-header-mini">Météo Opérationnelle</div>
+                    <div id="meteo" class="meteo-grid"></div>
+                    <div class="panel-header-mini">Prévisions (6h)</div>
+<div id="forecast-extended"></div>
+
+                    <div class="panel-header-mini">Briefing SORA / GAE</div>
+                    <div id="checklist-content"></div>
+                </div>
+       
+            </aside>
+        </div>
+    </main>
+
+    <div class="bottom-bar">
+        <div id="updateProgressBar" class="progress"></div>
+    </div>
+<script src="app/clocks.js"></script>
+<script src="app/meteo.js"></script>
+<script src="app/checklist.js"></script>
+<script src="app/autocomplete.js"></script>
+
+<script src="app/allowed_zones.js"></script>
+<script src="app/UASZones.js"></script>
+<script src="app/restrictions_sia.js"></script>
+<script src="app/openaip.js"></script>
+
+
+<script src="app/map.js"></script>
+<script src="app/ui.js"></script>
+<script src="app/zones.js"></script>
+
+<script src="app/main.js"></script>
+
+</body>
+</html>

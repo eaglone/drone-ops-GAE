@@ -1,141 +1,95 @@
 /**
- * DGACZONES.JS — DGAC dynamique autour de la carte
- * - chargement bbox carte
- * - mise à jour automatique
- * - clic zone
+ * DGAC LOCAL JSON → Leaflet
+ * - fonctionne GitHub Pages
+ * - pas d'API
+ * - pas de clé IGN
  */
 
 let dgacLayer = null;
-let selectedLayer = null;
 
-const WFS_URL = "https://data.geopf.fr/wfs/ows";
-const TYPE_NAME = "TRANSPORTS.DRONES.RESTRICTIONS:carte_restriction_drones_lf";
+// ================= CONVERSION UAS → GEOJSON =================
 
+function convertUASZonesToGeoJSON(data){
 
-// ================= STYLE =================
+    const features = [];
 
-function dgacStyle(feature) {
-    const p = feature.properties || {};
-    const alt = p.limite_alti ?? p.hauteur_max ?? 0;
+    data.features.forEach(zone => {
+
+        zone.geometry?.forEach(g => {
+
+            const geom = g.horizontalProjection;
+            if(!geom) return;
+
+            features.push({
+                type:"Feature",
+                properties:{
+                    name: zone.name,
+                    restriction: zone.restriction,
+                    lower:g.lowerLimit,
+                    upper:g.upperLimit,
+                    message:zone.message
+                },
+                geometry:geom
+            });
+        });
+    });
 
     return {
-        color: alt === 0 ? "#ff0000" : "#ff9800",
-        fillColor: alt === 0 ? "#ff0000" : "#ff9800",
-        weight: 2,
-        fillOpacity: 0.3
+        type:"FeatureCollection",
+        features
     };
 }
 
+// ================= STYLE =================
+
+function dgacStyle(feature){
+    return {
+        color: feature.properties.restriction === "PROHIBITED"
+            ? "#ff0000"
+            : "#ff9800",
+        fillOpacity:0.3,
+        weight:2
+    };
+}
 
 // ================= CLICK =================
 
-function onEachDGACFeature(feature, layer) {
+function onEachDGACFeature(feature, layer){
 
-    const p = feature.properties || {};
-
-    const altitude =
-        p.limite_alti ??
-        p.hauteur_max ??
-        p.altitude_max ??
-        "Non renseignée";
-
-    const zoneName =
-        p.nom ??
-        p.nom_zone ??
-        p.designation ??
-        "Non renseignée";
-
-    const statut =
-        altitude === 0
-            ? "🚫 VOL INTERDIT"
-            : `✅ Autorisé jusqu’à ${altitude} m`;
-
-    layer.on("click", e => {
-
-        if (selectedLayer) {
-            selectedLayer.setStyle(dgacStyle(selectedLayer.feature));
-        }
-
-        selectedLayer = layer;
-        layer.setStyle({ weight: 4, fillOpacity: 0.6 });
-
+    layer.on("click", e=>{
         L.popup()
             .setLatLng(e.latlng)
             .setContent(`
-<b>RESTRICTION DRONE DGAC</b><hr>
-<b>Statut :</b> ${statut}<br>
-<b>Zone :</b> ${zoneName}<br>
-<b>Altitude :</b> ${altitude} m AGL
+<b>ZONE DGAC</b><hr>
+<b>Nom :</b> ${feature.properties.name}<br>
+<b>Restriction :</b> ${feature.properties.restriction}<br>
+<b>Altitude :</b> ${feature.properties.lower} → ${feature.properties.upper} m
 `)
             .openOn(window.map);
     });
 }
 
+// ================= LOAD =================
 
-// ================= LOAD BBOX =================
+async function loadDGACZones(){
 
-async function loadDGACForBounds() {
+    if(dgacLayer) return dgacLayer;
+    if(!window.map) return null;
 
-    if (!window.map || !dgacLayer) return;
+    console.log("📡 Chargement DGAC local JSON");
 
-    const bounds = window.map.getBounds();
+    const res = await fetch("UASZones.json");
+    const data = await res.json();
 
-    const bbox = [
-        bounds.getWest(),
-        bounds.getSouth(),
-        bounds.getEast(),
-        bounds.getNorth()
-    ].join(",");
+    const geojson = convertUASZonesToGeoJSON(data);
 
-    console.log("📦 DGAC bbox:", bbox);
-
-    try {
-
-        const url =
-            `${WFS_URL}?service=WFS&version=2.0.0&request=GetFeature` +
-            `&typeName=${TYPE_NAME}` +
-            `&outputFormat=application/json` +
-            `&srsName=EPSG:4326` +
-            `&bbox=${bbox},EPSG:4326`;
-
-        const res = await fetch(url);
-        const data = await res.json();
-
-        dgacLayer.clearLayers();
-        dgacLayer.addData(data);
-
-    } catch (err) {
-        console.warn("DGAC bbox error", err);
-    }
-}
-
-
-// ================= INIT DGAC =================
-
-async function loadDGACZones() {
-
-    if (dgacLayer) return dgacLayer;
-    if (!window.map) return null;
-
-    console.log("🛰️ Initialisation DGAC dynamique...");
-
-    dgacLayer = L.geoJSON(null, {
-        pane: "zonesPane",
-        style: dgacStyle,
-        onEachFeature: onEachDGACFeature,
-        interactive: true
+    dgacLayer = L.geoJSON(geojson,{
+        pane:"zonesPane",
+        style:dgacStyle,
+        onEachFeature:onEachDGACFeature
     });
-
-    // recharge quand la carte bouge
-    window.map.on("moveend", loadDGACForBounds);
-
-    // premier chargement
-    await loadDGACForBounds();
 
     return dgacLayer;
 }
-
-
-// ================= EXPORT =================
 
 window.loadDGACZones = loadDGACZones;

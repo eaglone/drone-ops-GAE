@@ -14,6 +14,7 @@ let positionMarker = null;
 
 let osmLayer = null;
 let oaciLayer = null;
+let rainRadarLayer = null;
 
 
 // ================= INIT MAP =================
@@ -114,6 +115,29 @@ if(typeof window.loadDGACZones === "function"){
     }
 }
 
+    // ================= RADAR PLUIE =================
+async function initRainRadar(){
+
+    if(rainRadarLayer) return rainRadarLayer;
+
+    console.log("🌧️ init rain radar");
+
+    // récupérer timestamp RainViewer
+    const res = await fetch("https://api.rainviewer.com/public/weather-maps.json");
+    const data = await res.json();
+
+    const frame = data.radar.past.slice(-1)[0].path;
+
+    rainRadarLayer = L.tileLayer(
+        `https://tilecache.rainviewer.com${frame}/256/{z}/{x}/{y}/2/1_1.png`,
+        {
+            opacity:0.55,
+            pane:"airspacePane"
+        }
+    );
+
+    return rainRadarLayer;
+}
 
 
     // ================= CONTROLE COUCHES =================
@@ -121,12 +145,15 @@ if(typeof window.loadDGACZones === "function"){
     const baseMaps = {
         "Fond OSM": osmLayer
     };
+const radarLayer = await initRainRadar();
 
-    const overlays = {
+const overlays = {
     "Carte OACI IGN": oaciLayer,
-    "Restrictions drones IGN (officiel)": dgacIgnLayer,
+    "Restrictions drones IGN": dgacIgnLayer,
+    "Radar pluie": radarLayer,
     "Espaces aériens OpenAIP": window.openAipLayer
 };
+
 
 if(dgacLayer){
     overlays["DGAC Zones cliquables (avancé)"] = dgacLayer;

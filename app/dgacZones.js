@@ -1,11 +1,18 @@
 /**
- * DGAC LOCAL JSON → Leaflet (ROBUST VERSION)
+ * DGAC LOCAL JSON → Leaflet (PRO VERSION)
+ * - GitHub Pages compatible
+ * - robuste GeoJSON
+ * - clickable
+ * - fade selon zoom
+ * - perf optimisée
  */
 
 let dgacLayer = null;
 
 
-// ================= CONVERSION SAFE =================
+// =============================
+// VALIDATION GEOMETRY
+// =============================
 
 function isValidGeometry(geom){
 
@@ -13,7 +20,6 @@ function isValidGeometry(geom){
     if(!geom.type) return false;
     if(!geom.coordinates) return false;
 
-    // vérifie structure minimale
     if(
         geom.type === "Polygon" &&
         (!Array.isArray(geom.coordinates) || geom.coordinates.length === 0)
@@ -26,55 +32,118 @@ function isValidGeometry(geom){
 
     return true;
 }
+
+
+// =============================
+// CONVERSION JSON → GEOJSON SAFE
+// =============================
+
 function convertUASZonesToGeoJSON(data){
+
+    const features = [];
+
+    data.features.forEach(zone => {
+
+        if(!zone.geometry) return;
+
+        zone.geometry.forEach(g => {
+
+            const geom = g.horizontalProjection;
+            if(!isValidGeometry(geom)) return;
+
+            features.push({
+                type:"Feature",
+                properties:{
+                    name: zone.name,
+                    restriction: zone.restriction,
+                    lower:g.lowerLimit,
+                    upper:g.upperLimit,
+                    message:zone.message
+                },
+                geometry: geom
+            });
+
+        });
+    });
+
+    console.log("DGAC features:", features.length);
 
     return {
         type:"FeatureCollection",
-        features:data.features.flatMap(zone => {
-
-            if(!zone.geometry) return [];
-
-            return zone.geometry
-                .filter(g => g.horizontalProjection)
-                .map(g => ({
-
-                    type:"Feature",
-
-                    properties:{
-                        name: zone.name,
-                        restriction: zone.restriction,
-                        lower:g.lowerLimit,
-                        upper:g.upperLimit,
-                        message:zone.message
-                    },
-
-                    geometry:{
-                        type:g.horizontalProjection.type,
-                        coordinates:g.horizontalProjection.coordinates
-                    }
-                }));
-        })
+        features
     };
 }
 
 
-
-
-
-// ================= STYLE =================
+// =============================
+// STYLE
+// =============================
 
 function dgacStyle(feature){
+
+    const prohibited = feature.properties.restriction === "PROHIBITED";
+
     return {
-        color: feature.properties.restriction === "PROHIBITED"
-            ? "#ff0000"
-            : "#ff9800",
-        fillOpacity:0.3,
-        weight:2
+        color: prohibited ? "#ff0000" : "#ff9800",
+        fillColor: prohibited ? "#ff0000" : "#ff9800",
+        weight: 2,
+        fillOpacity: 0.35
     };
 }
 
 
-// ================= LOAD =================
+// =============================
+// CLICK POPUP
+// =============================
+
+function onEachDGACFeature(feature, layer){
+
+    const p = feature.properties || {};
+
+    const statut =
+        p.restriction === "PROHIBITED"
+        ? "🚫 VOL INTERDIT"
+        : "⚠️ Zone réglementée";
+
+    layer.on("click", e => {
+
+        L.popup()
+            .setLatLng(e.latlng)
+            .setContent(`
+<b>RESTRICTION DRONE DGAC</b><hr>
+<b>Statut :</b> ${statut}<br>
+<b>Zone :</b> ${p.name || "N/A"}<br>
+<b>Altitude :</b> ${p.lower ?? 0} → ${p.upper ?? "∞"} m AGL
+`)
+            .openOn(window.map);
+    });
+}
+
+
+// =============================
+// FADE SELON ZOOM (ULTRA UX)
+// =============================
+
+function updateDGACOpacity(){
+
+    if(!window.map || !dgacLayer) return;
+
+    const z = window.map.getZoom();
+
+    let opacity = 0.35;
+
+    if(z < 8) opacity = 0;
+    else if(z < 10) opacity = 0.2;
+    else if(z < 13) opacity = 0.35;
+    else opacity = 0.6;
+
+    dgacLayer.setStyle({ fillOpacity: opacity });
+}
+
+
+// =============================
+// LOAD DGAC
+// =============================
 
 async function loadDGACZones(){
 
@@ -85,9 +154,10 @@ async function loadDGACZones(){
 
     try{
 
-        const res = await fetch("./UASZones.json");
+        // ⚠️ adapte si ton fichier est ailleurs
+        const res = await fetch("app/UASZones.json");
 
-        if(!res.ok) throw new Error("JSON non trouvé");
+        if(!res.ok) throw new Error("UASZones.json introuvable");
 
         const data = await res.json();
 
@@ -99,6 +169,11 @@ async function loadDGACZones(){
             onEachFeature:onEachDGACFeature
         });
 
+        // fade dynamique
+        window.map.on("zoomend", updateDGACOpacity);
+
+        updateDGACOpacity();
+
         console.log("✅ DGAC chargé");
 
         return dgacLayer;
@@ -109,5 +184,9 @@ async function loadDGACZones(){
     }
 }
 
+
+// =============================
+// EXPORT GLOBAL
+// =============================
 
 window.loadDGACZones = loadDGACZones;

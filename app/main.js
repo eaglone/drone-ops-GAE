@@ -50,15 +50,19 @@ function initPosition(){
 // INIT MODULES
 // ================================
 function initModules(){
-    safeCall("initClocks");
-    safeCall("initAutocomplete");
-    safeCall("initMeteo");
-    safeCall("generateSoraChecklist");
-    
-    // NOTE: On ne safeCall PAS loadDGACZones ici car c'est map.js 
-    // qui va l'appeler pour l'intégrer au sélecteur de couches.
-    safeCall("loadNotam");
+
+    // laisse le DOM finir de charger tous les scripts
+    setTimeout(()=>{
+
+        safeCall("initClocks");
+        safeCall("initAutocomplete");
+        safeCall("initMeteo");
+        safeCall("generateSoraChecklist");
+        safeCall("loadNotam");
+
+    },100);
 }
+
 
 // ================================
 // INIT MAP SAFE

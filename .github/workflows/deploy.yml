@@ -11,12 +11,9 @@ permissions:
 
 jobs:
   deploy:
-    # --- AJOUTER CES DEUX LIGNES ICI ---
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    # -----------------------------------
-    
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -24,11 +21,8 @@ jobs:
 
       - name: Inject API Key
         run: |
-          # Injection de ton secret dans ton fichier JS
+          # Cette ligne cherche la balise dans app/map.js et met ta clé à la place
           sed -i "s/__METEO_FRANCE_API_KEY__/${{ secrets.METEO_FRANCE_API_KEY }}/g" app/map.js
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

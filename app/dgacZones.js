@@ -1,11 +1,19 @@
 /**
- * DGACZONES.JS — Restrictions drones via WFS GeoPlateforme (vecteur live)
+ * DGACZONES.JS — Restrictions drones DGAC France entière via WFS IGN
+ * - Chargement national
+ * - Clic zone → info
+ * - Highlight sélection
+ * - Popup robuste (compatible IGN)
  */
 
 let dgacLayer = null;
 let selectedLayer = null;
 
+/**
+ * Charge toutes les zones DGAC France entière
+ */
 async function loadDGACZones() {
+
     if (dgacLayer) return dgacLayer;
 
     if (!window.map) {
@@ -14,17 +22,9 @@ async function loadDGACZones() {
     }
 
     try {
-        console.log("🛰️ Chargement WFS DGAC...");
+        console.log("🛰️ Chargement DGAC France entière (WFS IGN)...");
 
-        // bbox de la carte (optimise perf)
-        const bounds = window.map.getBounds();
-        const bbox = [
-            bounds.getWest(),
-            bounds.getSouth(),
-            bounds.getEast(),
-            bounds.getNorth()
-        ].join(",");
-
+        // ⚠️ France entière → pas de bbox
         const url = `
 https://data.geopf.fr/wfs/ows
 ?service=WFS
@@ -33,77 +33,107 @@ https://data.geopf.fr/wfs/ows
 &typeName=TRANSPORTS.DRONES.RESTRICTIONS:carte_restriction_drones_lf
 &outputFormat=application/json
 &srsName=EPSG:4326
-&bbox=${bbox},EPSG:4326
 `.replace(/\s+/g, "");
 
         const response = await fetch(url);
-        if (!response.ok) throw new Error("Erreur réseau WFS");
+
+        if (!response.ok) {
+            throw new Error("Erreur réseau WFS");
+        }
 
         const geojson = await response.json();
+
+        console.log("✅ Données DGAC reçues :", geojson.features.length, "zones");
 
         dgacLayer = L.geoJSON(geojson, {
             pane: "zonesPane",
 
             style(feature) {
-                const alt = feature.properties?.limite_alti ?? 0;
+                const p = feature.properties || {};
+                const altitude =
+                    p.limite_alti ??
+                    p.hauteur_max ??
+                    p.altitude_max ??
+                    p.alt_max ??
+                    0;
 
                 return {
-                    color: alt === 0 ? "#ff0000" : "#ff9800",
-                    fillColor: alt === 0 ? "#ff0000" : "#ff9800",
+                    color: altitude === 0 ? "#ff0000" : "#ff9800",
+                    fillColor: altitude === 0 ? "#ff0000" : "#ff9800",
                     weight: 2,
                     fillOpacity: 0.3
                 };
             },
 
             onEachFeature(feature, layer) {
+
                 const p = feature.properties || {};
 
-                const defaultStyle = {
-                    color: p.limite_alti === 0 ? "#ff0000" : "#ff9800",
-                    fillColor: p.limite_alti === 0 ? "#ff0000" : "#ff9800",
-                    weight: 2,
-                    fillOpacity: 0.3
-                };
+                // valeurs robustes IGN
+                const altitude =
+                    p.limite_alti ??
+                    p.hauteur_max ??
+                    p.altitude_max ??
+                    p.alt_max ??
+                    "Non renseignée";
+
+                const zoneName =
+                    p.nom ??
+                    p.nom_zone ??
+                    p.designation ??
+                    p.libelle ??
+                    "Non renseignée";
+
+                const typeZone =
+                    p.nature ??
+                    p.type ??
+                    p.type_zone ??
+                    "Non précisé";
+
+                const identifiant =
+                    p.id ??
+                    p.identifiant ??
+                    p.objectid ??
+                    "—";
+
+                const statut =
+                    altitude === 0
+                        ? "🚫 VOL INTERDIT"
+                        : `✅ Autorisé jusqu’à ${altitude} m`;
+
+                const defaultStyle = layer.options.style(feature);
 
                 const selectedStyle = {
                     weight: 4,
-                    fillOpacity: 0.5
+                    fillOpacity: 0.6
                 };
 
                 // clic zone
-                layer.on("click", function (e) {
+                layer.on("click", function(e) {
 
                     // reset ancienne sélection
                     if (selectedLayer) {
                         selectedLayer.setStyle(defaultStyle);
                     }
 
-                    // nouvelle sélection
                     selectedLayer = layer;
                     layer.setStyle(selectedStyle);
 
                     const popupContent = `
-                        <div style="font-family:Inter,sans-serif;min-width:200px">
-                            <strong style="color:#ef4444">
-                                RESTRICTION DRONE DGAC
-                            </strong>
-                            <hr>
+<div style="font-family:Inter,sans-serif;min-width:220px">
+<strong style="color:#ef4444">RESTRICTION DRONE DGAC</strong>
+<hr>
 
-                            <b>Zone :</b> ${p.nom || "Non renseigné"}<br>
+<b>Statut :</b> ${statut}<br>
+<b>Zone :</b> ${zoneName}<br>
+<b>Altitude max :</b> ${altitude} m AGL<br>
+<b>Type :</b> ${typeZone}<br>
+<b>Identifiant :</b> ${identifiant}<br>
 
-                            <b>Altitude max :</b>
-                            ${p.limite_alti ?? "?"} m AGL<br>
-
-                            <b>Type :</b>
-                            ${p.nature || "Non précisé"}<br>
-
-                            <b>Identifiant :</b>
-                            ${p.id || "—"}<br>
-
-                            <hr>
-                            <small>Source : IGN / DGAC</small>
-                        </div>
-                    `;
+<hr>
+<small>Source : IGN / DGAC</small>
+</div>
+`;
 
                     L.popup()
                         .setLatLng(e.latlng)
@@ -113,33 +143,37 @@ https://data.geopf.fr/wfs/ows
             }
         });
 
-        console.log("✅ WFS DGAC chargé");
+        console.log("✅ Couche DGAC prête");
+
         return dgacLayer;
 
     } catch (err) {
-        console.error("❌ Erreur WFS DGAC", err);
+        console.error("❌ Erreur DGAC WFS :", err);
         return null;
     }
 }
 
+
 /**
- * Ajoute au layerControl
+ * Ajoute la couche au contrôle (checkbox)
  */
 async function addDGACToLayerControl() {
+
     const layer = await loadDGACZones();
     if (!layer) return;
 
     if (!window.overlayMaps) window.overlayMaps = {};
 
-    window.overlayMaps["Zones DGAC (WFS)"] = layer;
+    window.overlayMaps["Restrictions DGAC (France)"] = layer;
 
     if (!window.layerControl) {
         window.layerControl = L.control.layers(
             window.baseMaps || {},
-            window.overlayMaps
+            window.overlayMaps,
+            { collapsed: false }
         ).addTo(window.map);
     } else {
-        window.layerControl.addOverlay(layer, "Zones DGAC (WFS)");
+        window.layerControl.addOverlay(layer, "Restrictions DGAC (France)");
     }
 }
 

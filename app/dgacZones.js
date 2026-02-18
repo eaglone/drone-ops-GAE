@@ -14,9 +14,8 @@ const TYPE_NAME = "TRANSPORTS.DRONES.RESTRICTIONS:carte_restriction_drones_lf";
 const PAGE_SIZE = 5000;
 
 
-/**
- * Streaming WFS IGN (pagination)
- */
+// ================= STREAM WFS =================
+
 async function fetchAllDGACFeaturesProgressive(onBatch) {
 
     let startIndex = 0;
@@ -32,12 +31,10 @@ async function fetchAllDGACFeaturesProgressive(onBatch) {
         if (!res.ok) throw new Error("Erreur WFS");
 
         const data = await res.json();
-
         if (!data.features?.length) break;
 
         all = all.concat(data.features);
 
-        // affichage immédiat
         onBatch({
             type: "FeatureCollection",
             features: data.features
@@ -57,9 +54,8 @@ async function fetchAllDGACFeaturesProgressive(onBatch) {
 }
 
 
-/**
- * Style DGAC
- */
+// ================= STYLE =================
+
 function dgacStyle(feature) {
     const p = feature.properties || {};
     const alt = p.limite_alti ?? p.hauteur_max ?? 0;
@@ -73,9 +69,8 @@ function dgacStyle(feature) {
 }
 
 
-/**
- * Interaction clic zone
- */
+// ================= CLICK =================
+
 function onEachDGACFeature(feature, layer) {
 
     const p = feature.properties || {};
@@ -122,9 +117,8 @@ function onEachDGACFeature(feature, layer) {
 }
 
 
-/**
- * Charge couche DGAC
- */
+// ================= LOAD DGAC =================
+
 async function loadDGACZones() {
 
     if (dgacLayer) return dgacLayer;
@@ -134,43 +128,43 @@ async function loadDGACZones() {
         return null;
     }
 
-   console.log("🛰️ Initialisation DGAC optimisé...");
+    console.log("🛰️ Initialisation DGAC optimisé...");
 
-dgacLayer = L.geoJSON(null, {
-    pane: "zonesPane",
-    style: dgacStyle,
-    onEachFeature: onEachDGACFeature,
-    interactive: true   // 🔥 IMPORTANT
-});
+    dgacLayer = L.geoJSON(null, {
+        pane: "zonesPane",
+        style: dgacStyle,
+        onEachFeature: onEachDGACFeature,
+        interactive: true
+    });
 
+    // CACHE FIRST
+    const cached = await window.loadDGAC?.();
 
-// CACHE FIRST
-const cached = await window.loadDGAC?.();
+    if (cached) {
+        console.log("⚡ DGAC depuis cache");
+        dgacLayer.addData(cached);
+        return dgacLayer;
+    }
 
-if (cached) {
-    console.log("⚡ DGAC depuis cache");
-    dgacLayer.addData(cached);
-    return dgacLayer;
+    // WORKER
+    const worker = new Worker("app/dgacWorkers.js");
+
+    worker.onmessage = e => {
+        dgacLayer.addData(e.data);
+        window.saveDGAC?.(e.data);
+    };
+
+    // STREAM WFS
+    await fetchAllDGACFeaturesProgressive(batch => {
+        worker.postMessage(batch);
+    });
+
+    return dgacLayer; // 🔥 manquait logique avant
 }
 
-// WORKER
-const worker = new Worker("app/dgacWorkers.js");
 
-worker.onmessage = e => {
-    dgacLayer.addData(e.data);
-    window.saveDGAC?.(e.data);
-};
+// ================= LAYER CONTROL =================
 
-
-// STREAM WFS
-await fetchAllDGACFeaturesProgressive(batch => {
-    worker.postMessage(batch);
-});
-
-
-/**
- * Layer control
- */
 async function addDGACToLayerControl() {
 
     const layer = await loadDGACZones();
@@ -189,6 +183,9 @@ async function addDGACToLayerControl() {
         window.layerControl.addOverlay(layer, "Restrictions DGAC (France)");
     }
 }
+
+
+// ================= EXPORT GLOBAL =================
 
 window.loadDGACZones = loadDGACZones;
 window.addDGACToLayerControl = addDGACToLayerControl;

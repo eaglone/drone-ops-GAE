@@ -1,158 +1,532 @@
 /**
+
  * MAP.JS — Drone OPS Tactical Map
- * VERSION PRO — SÉCURISÉE & AUTOMATISÉE
- * * Ce fichier gère l'affichage cartographique et l'injection du token Météo-France.
+
+ * VERSION PRO STABLE — PRODUCTION READY
+
+ *
+
+ * ORDRE COUCHES :
+
+ * 1. OSM (fond)
+
+ * 2. OACI IGN
+
+ * 3. DGAC officiel IGN
+
+ * 4. DGAC vecteur cliquable (option)
+
+ * 5. Radar météo animé
+
+ * 6. OpenAIP (top)
+
  */
 
+
 let map = null;
+
 let positionMarker = null;
+
+
 let osmLayer = null;
+
 let oaciLayer = null;
+
+
 let rainRadarLayer = null;
 
-// =====================================================
-// 1. GESTION DU RADAR PLUIE (MÉTÉO-FRANCE)
+let radarFrames = [];
+
+let radarIndex = 0;
+
+let radarTimer = null;
+
+
+
 // =====================================================
 
-async function initRainRadar() {
-    console.log("🛰️ Initialisation du Radar...");
+// RADAR PLUIE ANIMÉ PRO
 
-    if (rainRadarLayer && map) {
-        map.removeLayer(rainRadarLayer);
+// =====================================================
+
+
+async function initRainRadar(){
+
+
+    console.log("🌧️ Init Rain Radar PRO");
+
+
+    try{
+
+        const res = await fetch("https://api.rainviewer.com/public/weather-maps.json");
+
+        const data = await res.json();
+
+
+        radarFrames = data?.radar?.past?.slice(-10) || [];
+
+
+        if(!radarFrames.length){
+
+            throw new Error("Pas de frame radar");
+
+        }
+
+
+        // si déjà créé → reset animation
+
+        if(rainRadarLayer){
+
+            radarIndex = 0;
+
+            return rainRadarLayer;
+
+        }
+
+
+        rainRadarLayer = L.tileLayer(
+
+            buildRadarURL(radarFrames[0].path),
+
+            {
+
+                pane: "weatherPane",
+
+                opacity: 0.7,
+
+
+                // ⭐ ZOOM OPTIMISÉ
+
+                maxNativeZoom: 10,   // résolution réelle radar
+
+                maxZoom: 18,
+
+                keepBuffer: 8,       // évite disparition en zoom rapide
+
+                updateWhenIdle: true,
+
+                updateWhenZooming: false,
+
+                updateInterval: 200,
+
+                detectRetina: true,
+
+
+                attribution: "© RainViewer"
+
+            }
+
+        );
+
+
+        startRadarAnimation();
+
+
+        return rainRadarLayer;
+
+
+    }catch(e){
+
+        console.warn("Radar indisponible", e);
+
+        return null;
+
     }
 
-    /**
-     * SÉCURITÉ : Injection du Token
-     * La balise ci-dessous est remplacée par GitHub Actions lors du déploiement.
-     */
-    const injectedToken = "__METEO_FRANCE_API_KEY__";
-    
-    // On vérifie si le token est injecté, sinon on check le localStorage (pour le dev local)
-    const mfToken = (injectedToken !== "__" + "METEO_FRANCE_API_KEY__" && injectedToken !== "") 
-                    ? injectedToken 
-                    : localStorage.getItem('MF_TOKEN');
-
-    if (mfToken) {
-        // OPTION A : Flux AROME-PI Haute Résolution (Requiert Token)
-        console.log("✅ Token détecté : Chargement AROME-PI HD");
-        const wmsUrl = "https://portail-api.meteofrance.fr/wms/MF-NWP-HIGHRES-AROMEPI-001-FRANCE-WMS/GetMap";
-        
-        rainRadarLayer = L.tileLayer.wms(wmsUrl, {
-            layers: 'PRECIPITATION_TOP_LEVEL', 
-            format: 'image/png',
-            transparent: true,
-            version: '1.3.0',
-            opacity: 0.65,
-            token: mfToken,
-            pane: "weatherPane",
-            attribution: "© Météo-France AROME-PI"
-        });
-    } else {
-        // OPTION B : Image Stable Data.gouv (Sans Token)
-        console.warn("⚠️ Aucun token trouvé : Passage sur URL stable Data.gouv");
-        const stableUrl = "https://www.data.gouv.fr/api/1/datasets/r/87668014-3d50-4074-9ba3-c4ef92882bd7";
-        const imageBounds = [[51.5, -5.8], [41.2, 9.8]]; // Calage France
-        
-        rainRadarLayer = L.imageOverlay(stableUrl, imageBounds, {
-            opacity: 0.7,
-            pane: "weatherPane",
-            attribution: "© Météo-France / Data.gouv"
-        });
-    }
-
-    return rainRadarLayer;
 }
 
-// Rafraîchissement automatique toutes les 5 minutes
-setInterval(() => {
-    if (rainRadarLayer && map && map.hasLayer(rainRadarLayer)) {
-        console.log("🔄 Actualisation des données radar...");
-        if (typeof rainRadarLayer.setUrl === 'function') {
-            const baseUrl = "https://www.data.gouv.fr/api/1/datasets/r/87668014-3d50-4074-9ba3-c4ef92882bd7";
-            rainRadarLayer.setUrl(`${baseUrl}?t=${Date.now()}`);
-        } else if (typeof rainRadarLayer.redraw === 'function') {
-            rainRadarLayer.redraw();
-        }
-    }
-}, 300000);
+
+
+
+function startRadarAnimation(){
+
+
+    if(radarTimer) clearInterval(radarTimer);
+
+
+    radarTimer = setInterval(()=>{
+
+
+        if(!radarFrames.length || !rainRadarLayer) return;
+
+
+        radarIndex = (radarIndex + 1) % radarFrames.length;
+
+
+        // transition plus douce
+
+        rainRadarLayer.setOpacity(0.0);
+
+
+        setTimeout(()=>{
+
+            rainRadarLayer.setUrl(
+
+                buildRadarURL(radarFrames[radarIndex].path)
+
+            );
+
+            rainRadarLayer.setOpacity(0.7);
+
+        }, 150);
+
+
+    }, 1500); // 1.5 sec = fluide pro
+
+}
+
+
+
 
 // =====================================================
-// 2. INITIALISATION DE LA CARTE
+
+// INIT MAP
+
 // =====================================================
 
-async function initMap() {
-    // Sécurité contre la double initialisation
-    if (!document.getElementById("map") || map) return;
 
-    console.log("🗺️ Chargement du Dashboard Tactique...");
+async function initMap(){
 
-    // Config compatible Leaflet 1.4.0 (Windy)
-    map = L.map("map", {
-        zoomControl: true,
-        preferCanvas: false,
-        zoomAnimation: false 
-    }).setView([46.6, 2.2], 6);
+
+    if(!document.getElementById("map")) return;
+
+    if(map) return;
+
+
+    console.log("🗺️ Initialisation carte");
+
+
+    map = L.map("map",{
+
+        zoomControl:true,
+
+        preferCanvas:true
+
+    }).setView([
+
+        window.latitude || 48.783057,
+
+        window.longitude || 2.213649
+
+    ],10);
+
 
     window.map = map;
 
-    // Création des Panes (Z-Index)
-    map.createPane("weatherPane").style.zIndex = 675;
-    map.createPane("airspacePane").style.zIndex = 700;
 
-    // --- COUCHES DE BASE ---
-    osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: "© OpenStreetMap"
+
+    // ================= PANES (ordre rendu)
+
+
+    map.createPane("zonesPane");
+
+    map.getPane("zonesPane").style.zIndex = 650;
+
+
+    map.createPane("weatherPane");
+
+    map.getPane("weatherPane").style.zIndex = 675;
+
+
+    map.createPane("airspacePane");
+
+    map.getPane("airspacePane").style.zIndex = 700;
+
+
+
+    // ================= OSM BASE
+
+
+    osmLayer = L.tileLayer(
+
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+
+        {
+
+            maxZoom:19,
+
+            attribution:"© OpenStreetMap"
+
+        }
+
+    ).addTo(map);
+
+
+
+    // ================= OACI IGN
+
+
+    oaciLayer = L.tileLayer(
+
+        "https://data.geopf.fr/private/wmts?" +
+
+        "SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0" +
+
+        "&LAYER=GEOGRAPHICALGRIDSYSTEMS.MAPS.SCAN-OACI" +
+
+        "&STYLE=normal" +
+
+        "&TILEMATRIXSET=PM" +
+
+        "&FORMAT=image/jpeg" +
+
+        "&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}" +
+
+        "&apikey=8Y5CE2vg2zJMePOhqeHYhXx4fmI3uzpz",
+
+        {
+
+            opacity:0.7,
+
+            maxZoom:18,
+
+            attribution:"© IGN — Carte OACI"
+
+        }
+
+    ).addTo(map);
+
+
+
+    // ================= DGAC IGN OFFICIEL
+
+
+    const dgacIgnLayer = L.tileLayer(
+
+        "https://data.geopf.fr/wmts?" +
+
+        "SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0" +
+
+        "&LAYER=TRANSPORTS.DRONES.RESTRICTIONS" +
+
+        "&STYLE=normal" +
+
+        "&TILEMATRIXSET=PM" +
+
+        "&FORMAT=image/png" +
+
+        "&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}",
+
+        {
+
+            opacity:0.75,
+
+            attribution:"© IGN — Restrictions drones"
+
+        }
+
+    );
+
+
+
+    // ================= OPENAIP
+
+
+    window.openAipLayer = L.layerGroup([],{
+
+        pane:"airspacePane"
+
     }).addTo(map);
 
-    oaciLayer = L.tileLayer("https://data.geopf.fr/private/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.MAPS.SCAN-OACI&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/jpeg&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&apikey=8Y5CE2vg2zJMePOhqeHYhXx4fmI3uzpz", {
-        opacity: 0.7,
-        attribution: "© IGN — Carte OACI"
-    }).addTo(map);
 
-    // --- COUCHES OPÉRATIONNELLES ---
-    window.openAipLayer = L.layerGroup([], { pane: "airspacePane" }).addTo(map);
 
-    // --- RADAR ---
-    const radar = await initRainRadar();
-    if (radar) radar.addTo(map);
+    // ================= DGAC VECTEUR (optionnel)
 
-    // --- CONTRÔLEUR DE COUCHES ---
-    const baseMaps = { "Fond OSM": osmLayer };
-    const overlays = {
-        "Carte OACI IGN": oaciLayer,
-        "Espaces aériens": window.openAipLayer,
-        "Radar Pluie": radar
+
+    let dgacLayer = null;
+
+
+    if(typeof window.loadDGACZones === "function"){
+
+        try{
+
+            dgacLayer = await window.loadDGACZones();
+
+            console.log("✅ DGAC vecteur prêt");
+
+        }catch(e){
+
+            console.warn("DGAC erreur", e);
+
+        }
+
+    }
+
+
+
+    // ================= RADAR METEO
+
+
+    const radarLayer = await initRainRadar();
+
+
+
+    // ================= CONTROLE COUCHES
+
+
+    const baseMaps = {
+
+        "Fond OSM": osmLayer
+
     };
 
-    L.control.layers(baseMaps, overlays, { collapsed: false }).addTo(map);
 
-    console.log("✅ MAP READY");
-}
+    const overlays = {
 
-// =====================================================
-// 3. FONCTIONS DE POSITIONNEMENT
-// =====================================================
+        "Carte OACI IGN": oaciLayer,
 
-function updateMapPosition(lat, lon) {
-    if (!map || !lat || !lon) return;
+        "Restrictions drones IGN": dgacIgnLayer,
 
-    map.setView([lat, lon], 11);
+        "Espaces aériens OpenAIP": window.openAipLayer
 
-    if (positionMarker) map.removeLayer(positionMarker);
+    };
 
-    positionMarker = L.circle([lat, lon], {
-        radius: 500,
-        color: "#38bdf8",
-        weight: 2,
-        fillOpacity: 0.15
+
+    if(radarLayer){
+
+        overlays["Radar pluie animé"] = radarLayer;
+
+    }
+
+
+    if(dgacLayer){
+
+        overlays["DGAC Zones cliquables"] = dgacLayer;
+
+    }
+
+
+    L.control.layers(baseMaps, overlays, {
+
+        collapsed:false
+
     }).addTo(map);
 
-    if (typeof loadOpenAIPAirspaces === "function") {
-        loadOpenAIPAirspaces(lat, lon);
-    }
+
+
+    // ================= AUTO REFRESH RADAR (5 min)
+
+
+    setInterval(async ()=>{
+
+        console.log("🔄 refresh radar");
+
+        radarFrames = [];
+
+        radarIndex = 0;
+
+        await initRainRadar();
+
+    }, 300000);
+
+
+
+    // ================= INIT OPENAIP
+
+
+    setTimeout(()=>{
+
+        if(typeof initOpenAIPAutoUpdate === "function"){
+
+            initOpenAIPAutoUpdate();
+
+        }
+
+    },500);
+
+
+    console.log("✅ MAP READY");
+
 }
 
-// Exports globaux pour main.js
+
+
+// =====================================================
+
+// UPDATE POSITION
+
+// =====================================================
+
+
+function updateMapPosition(lat,lon){
+
+
+    if(!map || !lat || !lon) return;
+
+
+    map.flyTo([lat,lon],11,{duration:0.6});
+
+
+    if(positionMarker){
+
+        map.removeLayer(positionMarker);
+
+    }
+
+
+    positionMarker = L.circle([lat,lon],{
+
+        radius:500,
+
+        color:"#38bdf8",
+
+        weight:2,
+
+        fillOpacity:0.15
+
+    }).addTo(map);
+
+
+    if(typeof loadOpenAIPAirspaces === "function"){
+
+        loadOpenAIPAirspaces(lat,lon);
+
+    }
+
+}
+
+
+
+// =====================================================
+
+// OPENAIP SUPPORT
+
+// =====================================================
+
+
+function setOpenAIPLayer(layer){
+
+
+    if(!window.openAipLayer) return;
+
+
+    try{
+
+        window.openAipLayer.clearLayers();
+
+        if(layer) window.openAipLayer.addLayer(layer);
+
+    }
+
+    catch(e){
+
+        console.warn("OpenAIP layer error",e);
+
+    }
+
+}
+
+
+
+// =====================================================
+
+// EXPORT GLOBAL
+
+// =====================================================
+
+
 window.initMap = initMap;
+
 window.updateMapPosition = updateMapPosition;
+
+window.setOpenAIPLayer = setOpenAIPLayer; 

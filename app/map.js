@@ -1,7 +1,6 @@
 /**
  * MAP.JS — Drone OPS Tactical Map
- * Version Production Stable
- * IGN + OACI + OpenAIP + Layers Control
+ * VERSION STABLE IGN + OACI + OPENAIP
  */
 
 let map = null;
@@ -16,14 +15,11 @@ let openAipLayer;
 
 function initMap(){
 
-    if (!document.getElementById("map")) return;
+    const mapDiv = document.getElementById("map");
+    if(!mapDiv) return;
 
-    // création carte
-    map = L.map("map", {
-        zoomControl: true
-    }).setView([window.latitude, window.longitude], 10);
+    map = L.map("map").setView([window.latitude || 48.85, window.longitude || 2.35], 10);
 
-    // rendre accessible globalement (IMPORTANT)
     window.map = map;
 
 
@@ -36,7 +32,7 @@ function initMap(){
 
 
     // =============================
-    // IGN PLAN (fond principal)
+    // IGN PLAN (URL CORRECTE LEAFLET)
     // =============================
 
     ignPlan = L.tileLayer(
@@ -50,13 +46,14 @@ function initMap(){
         "&apikey=8Y5CE2vg2zJMePOhqeHYhXx4fmI3uzpz",
         {
             maxZoom:18,
-            attribution:"© IGN GeoPF"
+            attribution:"© IGN GeoPF",
+            crossOrigin:true
         }
     ).addTo(map);
 
 
     // =============================
-    // CARTE OACI AÉRONAUTIQUE
+    // OACI
     // =============================
 
     ignOACI = L.tileLayer(
@@ -70,20 +67,21 @@ function initMap(){
         "&apikey=8Y5CE2vg2zJMePOhqeHYhXx4fmI3uzpz",
         {
             opacity:0.7,
-            maxZoom:15
+            maxZoom:15,
+            crossOrigin:true
         }
     );
 
 
     // =============================
-    // OPENAIP GROUP (vide au départ)
+    // OPENAIP
     // =============================
 
     openAipLayer = L.layerGroup();
 
 
     // =============================
-    // CONTROLE COUCHES (checkbox)
+    // CONTROLE COUCHES
     // =============================
 
     L.control.layers(
@@ -92,11 +90,9 @@ function initMap(){
             "Carte OACI": ignOACI
         },
         {
-            "Espaces aériens OpenAIP": openAipLayer
+            "Espaces aériens": openAipLayer
         },
-        {
-            collapsed:false
-        }
+        { collapsed:false }
     ).addTo(map);
 
 
@@ -106,76 +102,37 @@ function initMap(){
 
     map.on("zoomend",()=>{
 
-        const zoom = map.getZoom();
-
-        // afficher OACI à partir zoom mission
-        if(zoom >= 12){
-            if(!map.hasLayer(ignOACI)){
-                ignOACI.addTo(map);
-            }
+        if(map.getZoom() >= 12){
+            if(!map.hasLayer(ignOACI)) ignOACI.addTo(map);
         }else{
-            if(map.hasLayer(ignOACI)){
-                map.removeLayer(ignOACI);
-            }
+            if(map.hasLayer(ignOACI)) map.removeLayer(ignOACI);
         }
+
     });
 
-
-    // =============================
-    // AUTO UPDATE OPENAIP
-    // =============================
-
-    if(typeof initOpenAIPAutoUpdate === "function"){
-        initOpenAIPAutoUpdate();
-    }
-
+    console.log("✅ MAP INIT OK");
 }
 
 
 // ================= UPDATE POSITION =================
 
-function updateMapPosition(lat, lon){
+function updateMapPosition(lat,lon){
 
-    if(!map || !lat || !lon) return;
+    if(!map) return;
 
-    map.flyTo([lat, lon], 11, {
-        duration:0.6
-    });
+    map.flyTo([lat,lon],11,{duration:0.6});
 
-    // marker position
-    if(positionMarker){
-        map.removeLayer(positionMarker);
-    }
+    if(positionMarker) map.removeLayer(positionMarker);
 
-    positionMarker = L.circle([lat, lon],{
+    positionMarker = L.circle([lat,lon],{
         radius:500,
         color:"#38bdf8",
         weight:2,
         fillOpacity:0.15
     }).addTo(map);
 
-    // recharge OpenAIP
-    if(typeof loadOpenAIPAirspaces === "function"){
-        loadOpenAIPAirspaces(lat, lon);
-    }
-
-    // radar pluie
-    if(typeof updateRadar === "function"){
-        updateRadar(lat, lon);
-    }
-}
-
-
-// ================= OPENAIP LAYER CONTROL =================
-
-function setOpenAIPLayer(layer){
-
-    if(!openAipLayer) return;
-
-    openAipLayer.clearLayers();
-
-    if(layer){
-        openAipLayer.addLayer(layer);
+    if(typeof loadOpenAIPAirspaces==="function"){
+        loadOpenAIPAirspaces(lat,lon);
     }
 }
 
@@ -184,4 +141,3 @@ function setOpenAIPLayer(layer){
 
 window.initMap = initMap;
 window.updateMapPosition = updateMapPosition;
-window.setOpenAIPLayer = setOpenAIPLayer;

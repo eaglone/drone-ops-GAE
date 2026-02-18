@@ -1,149 +1,109 @@
 /**
- * DGAC LOCAL JSON → Leaflet (PRO VERSION)
- * - GitHub Pages compatible
- * - robuste GeoJSON
- * - clickable
- * - fade selon zoom
- * - perf optimisée
+ * DGAC LOCAL JSON → Leaflet
+ * PRO VERSION
+ * - style dynamique selon zoom
+ * - hover highlight
+ * - clic popup
+ * - performance 7000+ zones
  */
 
 let dgacLayer = null;
+let hoveredLayer = null;
 
 
-// =============================
-// VALIDATION GEOMETRY
-// =============================
-
-function isValidGeometry(geom){
-
-    if(!geom) return false;
-    if(!geom.type) return false;
-    if(!geom.coordinates) return false;
-
-    if(
-        geom.type === "Polygon" &&
-        (!Array.isArray(geom.coordinates) || geom.coordinates.length === 0)
-    ) return false;
-
-    if(
-        geom.type === "MultiPolygon" &&
-        (!Array.isArray(geom.coordinates) || geom.coordinates.length === 0)
-    ) return false;
-
-    return true;
-}
-
-
-// =============================
-// CONVERSION JSON → GEOJSON SAFE
-// =============================
-
-function convertUASZonesToGeoJSON(data){
-
-    const features = [];
-
-    data.features.forEach(zone => {
-
-        if(!zone.geometry) return;
-
-        zone.geometry.forEach(g => {
-
-            const geom = g.horizontalProjection;
-            if(!isValidGeometry(geom)) return;
-
-            features.push({
-                type:"Feature",
-                properties:{
-                    name: zone.name,
-                    restriction: zone.restriction,
-                    lower:g.lowerLimit,
-                    upper:g.upperLimit,
-                    message:zone.message
-                },
-                geometry: geom
-            });
-
-        });
-    });
-
-    console.log("DGAC features:", features.length);
-
-    return {
-        type:"FeatureCollection",
-        features
-    };
-}
-
-
-// =============================
-// STYLE
-// =============================
+// ================= STYLE DYNAMIQUE =================
 
 function dgacStyle(feature){
 
-    const prohibited = feature.properties.restriction === "PROHIBITED";
+    const zoom = window.map?.getZoom?.() || 10;
+
+    const baseOpacity = zoom < 9 ? 0.1 :
+                        zoom < 11 ? 0.2 :
+                        zoom < 13 ? 0.3 :
+                        0.45;
 
     return {
-        color: prohibited ? "#ff0000" : "#ff9800",
-        fillColor: prohibited ? "#ff0000" : "#ff9800",
-        weight: 2,
-        fillOpacity: 0.35
+        color: feature.properties.restriction === "PROHIBITED"
+            ? "#ff0000"
+            : "#ff9800",
+
+        fillColor: feature.properties.restriction === "PROHIBITED"
+            ? "#ff0000"
+            : "#ff9800",
+
+        weight: zoom >= 13 ? 2 : 1,
+        fillOpacity: baseOpacity
     };
 }
 
 
-// =============================
-// CLICK POPUP
-// =============================
+// ================= INTERACTION =================
 
 function onEachDGACFeature(feature, layer){
 
-    const p = feature.properties || {};
+    // hover highlight
+    layer.on("mouseover", () => {
 
-    const statut =
-        p.restriction === "PROHIBITED"
-        ? "🚫 VOL INTERDIT"
-        : "⚠️ Zone réglementée";
+        if(hoveredLayer && hoveredLayer !== layer){
+            hoveredLayer.setStyle(dgacStyle(hoveredLayer.feature));
+        }
 
+        hoveredLayer = layer;
+        layer.setStyle({ weight:4, fillOpacity:0.6 });
+    });
+
+    layer.on("mouseout", () => {
+        layer.setStyle(dgacStyle(feature));
+    });
+
+    // popup clic
     layer.on("click", e => {
 
         L.popup()
             .setLatLng(e.latlng)
             .setContent(`
-<b>RESTRICTION DRONE DGAC</b><hr>
-<b>Statut :</b> ${statut}<br>
-<b>Zone :</b> ${p.name || "N/A"}<br>
-<b>Altitude :</b> ${p.lower ?? 0} → ${p.upper ?? "∞"} m AGL
+<b>ZONE DGAC</b><hr>
+<b>Nom :</b> ${feature.properties.name || "—"}<br>
+<b>Restriction :</b> ${feature.properties.restriction || "—"}<br>
+<b>Altitude :</b> ${feature.properties.lower ?? "—"} → ${feature.properties.upper ?? "—"} m
 `)
             .openOn(window.map);
     });
 }
 
 
-// =============================
-// FADE SELON ZOOM (ULTRA UX)
-// =============================
+// ================= CONVERSION UAS → GEOJSON =================
 
-function updateDGACOpacity(){
+function convertUASZonesToGeoJSON(data){
 
-    if(!window.map || !dgacLayer) return;
+    return {
+        type:"FeatureCollection",
 
-    const z = window.map.getZoom();
+        features:data.features.flatMap(zone => {
 
-    let opacity = 0.35;
+            if(!zone.geometry) return [];
 
-    if(z < 8) opacity = 0;
-    else if(z < 10) opacity = 0.2;
-    else if(z < 13) opacity = 0.35;
-    else opacity = 0.6;
+            return zone.geometry
+                .filter(g => g.horizontalProjection)
+                .map(g => ({
+                    type:"Feature",
 
-    dgacLayer.setStyle({ fillOpacity: opacity });
+                    properties:{
+                        name: zone.name,
+                        restriction: zone.restriction,
+                        lower: g.lowerLimit,
+                        upper: g.upperLimit,
+                        message: zone.message
+                    },
+
+                    geometry:g.horizontalProjection
+                }));
+        })
+    };
 }
 
 
-// =============================
-// LOAD DGAC
-// =============================
+// ================= LOAD =================
 
 async function loadDGACZones(){
 
@@ -154,14 +114,15 @@ async function loadDGACZones(){
 
     try{
 
-        // ⚠️ adapte si ton fichier est ailleurs
+        // ⚠️ ton JSON doit être à la racine GitHub Pages
         const res = await fetch("app/UASZones.json");
 
-        if(!res.ok) throw new Error("UASZones.json introuvable");
+        if(!res.ok) throw new Error("JSON non trouvé");
 
         const data = await res.json();
-
         const geojson = convertUASZonesToGeoJSON(data);
+
+        console.log("DGAC features:", geojson.features.length);
 
         dgacLayer = L.geoJSON(geojson,{
             pane:"zonesPane",
@@ -169,12 +130,10 @@ async function loadDGACZones(){
             onEachFeature:onEachDGACFeature
         });
 
-        // fade dynamique
-        window.map.on("zoomend", updateDGACOpacity);
-
-        updateDGACOpacity();
-
-        console.log("✅ DGAC chargé");
+        // refresh style quand zoom change
+        window.map.on("zoomend", ()=>{
+            dgacLayer.setStyle(dgacStyle);
+        });
 
         return dgacLayer;
 
@@ -183,10 +142,5 @@ async function loadDGACZones(){
         return null;
     }
 }
-
-
-// =============================
-// EXPORT GLOBAL
-// =============================
 
 window.loadDGACZones = loadDGACZones;

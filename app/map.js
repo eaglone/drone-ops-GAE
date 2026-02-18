@@ -1,8 +1,7 @@
 /**
  * MAP.JS — Drone OPS Tactical Map
  * VERSION PRO STABLE — MÉTÉO-FRANCE & DATA.GOUV INTEGRATION
- * * Ce module gère l'affichage cartographique et les couches radar
- * sans exposer les clés API sur GitHub.
+ * FIX: Compatibilité Leaflet 1.4.0 (Windy) & Correction affichage Radar
  */
 
 let map = null;
@@ -23,7 +22,7 @@ async function initRainRadar() {
         map.removeLayer(rainRadarLayer);
     }
 
-    // Récupération du token depuis le secret/localStorage pour GitHub
+    // Récupération du token depuis le localStorage (évite l'exposition GitHub)
     const mfToken = localStorage.getItem('MF_TOKEN');
 
     if (mfToken) {
@@ -36,18 +35,18 @@ async function initRainRadar() {
             transparent: true,
             version: '1.3.0',
             opacity: 0.6,
-            token: mfToken, // Utilise ton secret enregistré
+            token: mfToken,
             pane: "weatherPane",
             attribution: "© Météo-France AROME-PI"
         });
         console.log("✅ Radar AROME-PI activé via Token");
     } else {
         // OPTION B : URL Stable Data.gouv (Mosaïque France sans token)
-        console.warn("⚠️ Pas de token MF_TOKEN trouvé. Utilisation de l'URL stable Data.gouv.");
+        console.warn("⚠️ Pas de token MF_TOKEN. Utilisation de l'URL stable Data.gouv.");
         
         const stableUrl = "https://www.data.gouv.fr/api/1/datasets/r/87668014-3d50-4074-9ba3-c4ef92882bd7";
         
-        // Coordonnées de la mosaïque pour couvrir la carte
+        // Coordonnées de la mosaïque calées sur la France
         const imageBounds = [[51.5, -5.8], [41.2, 9.8]]; 
         
         rainRadarLayer = L.imageOverlay(stableUrl, imageBounds, {
@@ -61,21 +60,21 @@ async function initRainRadar() {
     return rainRadarLayer;
 }
 
-// Rafraîchissement automatique toutes les 5 min (Évite le cache navigateur)
+// Rafraîchissement automatique (Bypass du cache navigateur)
 setInterval(() => {
     if (rainRadarLayer && map && map.hasLayer(rainRadarLayer)) {
         console.log("🔄 Refresh du radar pluie...");
         const timestamp = Date.now();
         if (typeof rainRadarLayer.setUrl === 'function') {
-            // Pour l'image stable
+            // Pour l'image stable (ImageOverlay)
             const baseUrl = "https://www.data.gouv.fr/api/1/datasets/r/87668014-3d50-4074-9ba3-c4ef92882bd7";
             rainRadarLayer.setUrl(`${baseUrl}?t=${timestamp}`);
-        } else {
+        } else if (typeof rainRadarLayer.redraw === 'function') {
             // Pour le flux WMS
             rainRadarLayer.redraw();
         }
     }
-}, 300000);
+}, 300000); // 5 minutes
 
 // =====================================================
 // 2. INITIALISATION DE LA CARTE
@@ -86,18 +85,20 @@ async function initMap() {
 
     console.log("🗺️ Chargement du Dashboard Tactique...");
 
-    // Initialisation centrée sur la France
+    // Initialisation forcée compatible Leaflet 1.4.0
     map = L.map("map", {
         zoomControl: true,
-        preferCanvas: true
+        preferCanvas: false // Plus stable pour les vieux Leaflet
     }).setView([46.6, 2.2], 6);
 
     window.map = map;
 
     // Gestion de l'ordre d'affichage (Panes)
-    map.createPane("zonesPane").style.zIndex = 650;
-    map.createPane("weatherPane").style.zIndex = 675;
-    map.createPane("airspacePane").style.zIndex = 700;
+    if (map.createPane) {
+        map.createPane("zonesPane").style.zIndex = 650;
+        map.createPane("weatherPane").style.zIndex = 675;
+        map.createPane("airspacePane").style.zIndex = 700;
+    }
 
     // --- COUCHES DE BASE ---
     osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -107,7 +108,6 @@ async function initMap() {
 
     oaciLayer = L.tileLayer("https://data.geopf.fr/private/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.MAPS.SCAN-OACI&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/jpeg&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&apikey=8Y5CE2vg2zJMePOhqeHYhXx4fmI3uzpz", {
         opacity: 0.7,
-        maxZoom: 18,
         attribution: "© IGN — Carte OACI"
     }).addTo(map);
 
@@ -117,6 +117,7 @@ async function initMap() {
         attribution: "© IGN — Restrictions drones"
     });
 
+    // Initialisation OpenAIP
     window.openAipLayer = L.layerGroup([], { pane: "airspacePane" }).addTo(map);
 
     // --- INITIALISATION DU RADAR ---
@@ -144,7 +145,7 @@ async function initMap() {
 function updateMapPosition(lat, lon) {
     if (!map || !lat || !lon) return;
 
-    map.flyTo([lat, lon], 11, { duration: 0.6 });
+    map.flyTo([lat, lon], 11);
 
     if (positionMarker) map.removeLayer(positionMarker);
 

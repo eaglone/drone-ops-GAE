@@ -13,14 +13,28 @@ let openAipLayer;
 
 // ================= INIT MAP =================
 
-function initMap(){
+function initMapSafe(){
 
-    const mapDiv = document.getElementById("map");
-    if(!mapDiv) return;
+    let attempts = 0;
 
-    map = L.map("map").setView([window.latitude || 48.85, window.longitude || 2.35], 10);
+    const waitMap = setInterval(()=>{
 
-    window.map = map;
+        if(typeof window.initMap === "function"){
+            window.initMap();
+            clearInterval(waitMap);
+            console.log("✅ Map chargée");
+        }
+
+        attempts++;
+
+        if(attempts > 20){
+            clearInterval(waitMap);
+            console.error("❌ Map introuvable");
+        }
+
+    },150);
+}
+
 
 
     // =============================

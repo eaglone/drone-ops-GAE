@@ -1,0 +1,33 @@
+name: Deploy Drone OPS
+
+on:
+  push:
+    branches: ["main"] # Se déclenche quand tu push sur main
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Inject API Key
+        run: |
+          # Remplace la balise par ton secret METEO_FRANCE_API_KEY dans le bon fichier
+          sed -i "s/__METEO_FRANCE_API_KEY__/${{ secrets.METEO_FRANCE_API_KEY }}/g" app/map.js
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.' # Déploie tout le projet
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4

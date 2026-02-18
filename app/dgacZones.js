@@ -26,54 +26,39 @@ function isValidGeometry(geom){
 
     return true;
 }
-
-
 function convertUASZonesToGeoJSON(data){
-
-    const features = [];
-    let skipped = 0;
-
-    if(!data?.features) throw new Error("Structure JSON invalide");
-
-    data.features.forEach(zone => {
-
-        if(!zone.geometry) return;
-
-        if(Array.isArray(zone.geometry)){
-
-            zone.geometry.forEach(g => {
-
-                const geom = g?.horizontalProjection;
-                if(!isValidGeometry(geom)){
-                    skipped++;
-                    return;
-                }
-
-                features.push({
-                    type:"Feature",
-                    properties:{
-                        name: zone.name || "Zone DGAC",
-                        restriction: zone.restriction || "UNKNOWN",
-                        lower:g.lowerLimit || 0,
-                        upper:g.upperLimit || 0
-                    },
-                    geometry:geom
-                });
-            });
-        }
-    });
-
-    console.log("DGAC features valid:", features.length);
-    console.log("DGAC features skipped:", skipped);
-
-    if(features.length === 0)
-        throw new Error("Aucune géométrie valide");
 
     return {
         type:"FeatureCollection",
-        features
+        features:data.features.flatMap(zone => {
+
+            if(!zone.geometry) return [];
+
+            return zone.geometry
+                .filter(g => g.horizontalProjection)
+                .map(g => ({
+
+                    type:"Feature",
+
+                    properties:{
+                        name: zone.name,
+                        restriction: zone.restriction,
+                        lower:g.lowerLimit,
+                        upper:g.upperLimit,
+                        message:zone.message
+                    },
+
+                    geometry:{
+                        type:g.horizontalProjection.type,
+                        coordinates:g.horizontalProjection.coordinates
+                    }
+                }));
+        })
     };
 }
+
+
+
 
 
 // ================= STYLE =================

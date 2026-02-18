@@ -130,28 +130,37 @@ async function loadMeteo(){
 
     try{
 
-        /* ================= ALTITUDE IGN ================= */
+      /* ================= ALTITUDE IGN ================= */
 
-       let altitude = "NC";
+let altitude = "NC";
 
 // altitude optionnelle — ne bloque jamais la météo
 try {
 
+    // timeout sécurité (évite freeze UI)
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 3000);
+
     const altRes = await fetch(
-        `https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?lon=${lon}&lat=${lat}`,
-        { method: "GET", mode: "cors" }
+        `https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json` +
+        `?lon=${lon}&lat=${lat}&resource=ign_rge_alti_wld`,
+        {
+            method: "GET",
+            mode: "cors",
+            signal: controller.signal
+        }
     );
 
-    if (altRes.ok) {
-        const altData = await altRes.json();
+    if (!altRes.ok) throw new Error("Altitude API error");
 
-        if (altData?.elevations?.length) {
-            altitude = altData.elevations[0].z.toFixed(0);
-        }
+    const altData = await altRes.json();
+
+    if (altData?.elevations?.length) {
+        altitude = Math.round(altData.elevations[0].z);
     }
 
 } catch (e) {
-    console.warn("Altitude IGN indisponible");
+    console.warn("Altitude IGN indisponible — fallback NC");
 }
 
 

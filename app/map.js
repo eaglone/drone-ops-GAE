@@ -20,31 +20,57 @@ let rainRadarLayer = null;
 
 // ================= RADAR PLUIE =================
 
+// ================= RADAR PLUIE ANIMÉ =================
+
+let rainRadarLayer = null;
+let rainAnimationTimer = null;
+
 async function initRainRadar(){
 
     if(rainRadarLayer) return rainRadarLayer;
 
-    console.log("🌧️ init rain radar");
+    console.log("🌧️ Radar pluie animé");
 
     try{
+
         const res = await fetch("https://api.rainviewer.com/public/weather-maps.json");
         const data = await res.json();
 
-        const frame = data?.radar?.past?.slice(-1)[0]?.path;
-        if(!frame) throw new Error("Radar indisponible");
+        if(!data?.radar?.past) throw new Error("Radar indisponible");
 
+        // dernières frames radar (10 images)
+        const frames = data.radar.past.slice(-10);
+
+        let frameIndex = 0;
+
+        // layer initial
         rainRadarLayer = L.tileLayer(
-            `https://tilecache.rainviewer.com${frame}/256/{z}/{x}/{y}/2/1_1.png`,
+            `https://tilecache.rainviewer.com${frames[0].path}/256/{z}/{x}/{y}/2/1_1.png`,
             {
                 opacity:0.65,
                 pane:"airspacePane",
-                attribution:"© RainViewer",
-
-                maxZoom:12,
-                minZoom:4,
-                updateWhenIdle:true
+                maxZoom:18,
+                attribution:"© RainViewer"
             }
         );
+
+        // animation boucle
+        function startAnimation(){
+
+            if(rainAnimationTimer) clearInterval(rainAnimationTimer);
+
+            rainAnimationTimer = setInterval(()=>{
+
+                frameIndex = (frameIndex + 1) % frames.length;
+
+                rainRadarLayer.setUrl(
+                    `https://tilecache.rainviewer.com${frames[frameIndex].path}/256/{z}/{x}/{y}/2/1_1.png`
+                );
+
+            }, 700); // vitesse animation (ms)
+        }
+
+        startAnimation();
 
         return rainRadarLayer;
 
@@ -53,6 +79,7 @@ async function initRainRadar(){
         return null;
     }
 }
+
 
 
 

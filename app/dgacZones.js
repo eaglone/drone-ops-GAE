@@ -52,25 +52,63 @@ https://data.geopf.fr/wfs/ows
                 };
             },
 
-            onEachFeature(feature, layer) {
-                const p = feature.properties || {};
+           onEachFeature(feature, layer) {
+    const p = feature.properties || {};
 
-                layer.bindPopup(`
-                    <b>Restriction UAS</b><br>
-                    Zone : ${p.nom || "?"}<br>
-                    Altitude max : ${p.limite_alti ?? "?"} m
-                `);
-            }
-        });
+    // style sélection
+    const defaultStyle = {
+        color: p.limite_alti === 0 ? "#ff0000" : "#ff9800",
+        fillColor: p.limite_alti === 0 ? "#ff0000" : "#ff9800",
+        weight: 2,
+        fillOpacity: 0.3
+    };
 
-        console.log("✅ WFS DGAC chargé");
-        return dgacLayer;
+    const selectedStyle = {
+        weight: 4,
+        fillOpacity: 0.5
+    };
 
-    } catch (err) {
-        console.error("❌ Erreur WFS DGAC", err);
-        return null;
-    }
+    layer.setStyle(defaultStyle);
+
+    // clic zone
+    layer.on("click", function (e) {
+
+        // reset style autres zones
+        dgacLayer.eachLayer(l => l.setStyle(defaultStyle));
+
+        // highlight zone sélectionnée
+        layer.setStyle(selectedStyle);
+
+        const popupContent = `
+            <div style="font-family:Inter,sans-serif;min-width:200px">
+                <strong style="color:#ef4444">
+                    RESTRICTION DRONE DGAC
+                </strong>
+                <hr>
+
+                <b>Zone :</b> ${p.nom || "Non renseigné"}<br>
+
+                <b>Altitude max :</b>
+                ${p.limite_alti ?? "?"} m AGL<br>
+
+                <b>Type :</b>
+                ${p.nature || "Non précisé"}<br>
+
+                <b>Identifiant :</b>
+                ${p.id || "—"}<br>
+
+                <hr>
+                <small>Source : IGN / DGAC</small>
+            </div>
+        `;
+
+        L.popup()
+            .setLatLng(e.latlng)
+            .setContent(popupContent)
+            .openOn(window.map);
+    });
 }
+
 
 /**
  * Ajoute au layerControl

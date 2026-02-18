@@ -117,12 +117,61 @@ function convertUASZonesToGeoJSON(data){
 
         if(!zone.geometry) return [];
 
-        return zone.geometry
-            .filter(g => isValidGeometry(g.horizontalProjection))
-            .map(g => ({
+        return zone.geometry.map(g => {
 
+            let geom = g.horizontalProjection;
+            if(!geom) return null;
+
+            // ===== convert Circle → Polygon =====
+            if(geom.type === "Circle" && geom.center && geom.radius){
+
+                const center = geom.center;
+                const radius = geom.radius;
+                const points = 32;
+                const coords = [];
+
+                const R = 6371000;
+                const lat1 = center[1] * Math.PI/180;
+                const lon1 = center[0] * Math.PI/180;
+
+                for(let i=0;i<=points;i++){
+                    const brng = (i * 360/points) * Math.PI/180;
+                    const lat2 = Math.asin(
+                        Math.sin(lat1)*Math.cos(radius/R) +
+                        Math.cos(lat1)*Math.sin(radius/R)*Math.cos(brng)
+                    );
+                    const lon2 = lon1 + Math.atan2(
+                        Math.sin(brng)*Math.sin(radius/R)*Math.cos(lat1),
+                        Math.cos(radius/R)-Math.sin(lat1)*Math.sin(lat2)
+                    );
+
+                    coords.push([lon2*180/Math.PI, lat2*180/Math.PI]);
+                }
+
+                geom = { type:"Polygon", coordinates:[coords] };
+            }
+
+            // ===== validation =====
+            if(!isValidGeometry(geom)){
+                skipped++;
+                return null;
+            }
+
+            // ===== ferme polygon si besoin =====
+            if(geom.type === "Polygon"){
+                geom.coordinates = geom.coordinates.map(ring=>{
+                    const first = ring[0];
+                    const last = ring[ring.length-1];
+
+                    if(first[0] !== last[0] || first[1] !== last[1]){
+                        ring.push(first);
+                    }
+                    return ring;
+                });
+            }
+
+            return {
                 type:"Feature",
-
                 properties:{
                     name: zone.name,
                     restriction: zone.restriction,
@@ -130,18 +179,21 @@ function convertUASZonesToGeoJSON(data){
                     upper: g.upperLimit,
                     message: zone.message
                 },
+                geometry: geom
+            };
 
-                geometry:g.horizontalProjection
-            }));
+        }).filter(Boolean);
+
     });
 
-    console.log("DGAC valid:", features.length);
+    console.log("DGAC valid:", features.length, "skipped:", skipped);
 
     return {
         type:"FeatureCollection",
         features
     };
 }
+
 
 
 // ================= REFRESH STYLE =================

@@ -148,7 +148,10 @@ async function loadDGACZones(){
         });
 
         // ⭐ update style quand zoom change (une seule fois)
-        window.map.on("zoomend", updateDGACStyle);
+       if(!window.dgacZoomListener){
+    window.map.on("zoomend", updateDGACStyle);
+    window.dgacZoomListener = true;
+}
 
         return dgacLayer;
 

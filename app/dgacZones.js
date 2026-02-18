@@ -3,6 +3,7 @@
  */
 
 let dgacLayer = null;
+let selectedLayer = null;
 
 async function loadDGACZones() {
     if (dgacLayer) return dgacLayer;
@@ -36,6 +37,8 @@ https://data.geopf.fr/wfs/ows
 `.replace(/\s+/g, "");
 
         const response = await fetch(url);
+        if (!response.ok) throw new Error("Erreur réseau WFS");
+
         const geojson = await response.json();
 
         dgacLayer = L.geoJSON(geojson, {
@@ -52,63 +55,72 @@ https://data.geopf.fr/wfs/ows
                 };
             },
 
-           onEachFeature(feature, layer) {
-    const p = feature.properties || {};
+            onEachFeature(feature, layer) {
+                const p = feature.properties || {};
 
-    // style sélection
-    const defaultStyle = {
-        color: p.limite_alti === 0 ? "#ff0000" : "#ff9800",
-        fillColor: p.limite_alti === 0 ? "#ff0000" : "#ff9800",
-        weight: 2,
-        fillOpacity: 0.3
-    };
+                const defaultStyle = {
+                    color: p.limite_alti === 0 ? "#ff0000" : "#ff9800",
+                    fillColor: p.limite_alti === 0 ? "#ff0000" : "#ff9800",
+                    weight: 2,
+                    fillOpacity: 0.3
+                };
 
-    const selectedStyle = {
-        weight: 4,
-        fillOpacity: 0.5
-    };
+                const selectedStyle = {
+                    weight: 4,
+                    fillOpacity: 0.5
+                };
 
-    layer.setStyle(defaultStyle);
+                // clic zone
+                layer.on("click", function (e) {
 
-    // clic zone
-    layer.on("click", function (e) {
+                    // reset ancienne sélection
+                    if (selectedLayer) {
+                        selectedLayer.setStyle(defaultStyle);
+                    }
 
-        // reset style autres zones
-        dgacLayer.eachLayer(l => l.setStyle(defaultStyle));
+                    // nouvelle sélection
+                    selectedLayer = layer;
+                    layer.setStyle(selectedStyle);
 
-        // highlight zone sélectionnée
-        layer.setStyle(selectedStyle);
+                    const popupContent = `
+                        <div style="font-family:Inter,sans-serif;min-width:200px">
+                            <strong style="color:#ef4444">
+                                RESTRICTION DRONE DGAC
+                            </strong>
+                            <hr>
 
-        const popupContent = `
-            <div style="font-family:Inter,sans-serif;min-width:200px">
-                <strong style="color:#ef4444">
-                    RESTRICTION DRONE DGAC
-                </strong>
-                <hr>
+                            <b>Zone :</b> ${p.nom || "Non renseigné"}<br>
 
-                <b>Zone :</b> ${p.nom || "Non renseigné"}<br>
+                            <b>Altitude max :</b>
+                            ${p.limite_alti ?? "?"} m AGL<br>
 
-                <b>Altitude max :</b>
-                ${p.limite_alti ?? "?"} m AGL<br>
+                            <b>Type :</b>
+                            ${p.nature || "Non précisé"}<br>
 
-                <b>Type :</b>
-                ${p.nature || "Non précisé"}<br>
+                            <b>Identifiant :</b>
+                            ${p.id || "—"}<br>
 
-                <b>Identifiant :</b>
-                ${p.id || "—"}<br>
+                            <hr>
+                            <small>Source : IGN / DGAC</small>
+                        </div>
+                    `;
 
-                <hr>
-                <small>Source : IGN / DGAC</small>
-            </div>
-        `;
+                    L.popup()
+                        .setLatLng(e.latlng)
+                        .setContent(popupContent)
+                        .openOn(window.map);
+                });
+            }
+        });
 
-        L.popup()
-            .setLatLng(e.latlng)
-            .setContent(popupContent)
-            .openOn(window.map);
-    });
+        console.log("✅ WFS DGAC chargé");
+        return dgacLayer;
+
+    } catch (err) {
+        console.error("❌ Erreur WFS DGAC", err);
+        return null;
+    }
 }
-
 
 /**
  * Ajoute au layerControl

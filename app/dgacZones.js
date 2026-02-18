@@ -14,18 +14,17 @@ let hoveredLayer = null;
 
 function getDGACOpacity(){
 
-    if(!window.map) return 0.4;
+    const z = window.map?.getZoom() || 10;
 
-    const z = window.map.getZoom();
-
-    // tu peux ajuster les valeurs
-    if(z <= 8) return 0.55;   // vue large → visible
-    if(z <= 10) return 0.45;
-    if(z <= 12) return 0.35;
-    if(z <= 14) return 0.25;
-    if(z <= 16) return 0.18;
-    return 0.12; // très zoomé → discret
+    // transparence progressive (plus on zoom → plus discret)
+    if(z <= 6) return 0.35;
+    if(z <= 8) return 0.28;
+    if(z <= 10) return 0.22;
+    if(z <= 12) return 0.16;
+    if(z <= 14) return 0.10;
+    return 0.05;
 }
+
 
 
 // ================= STYLE DYNAMIQUE =================
@@ -33,15 +32,27 @@ function getDGACOpacity(){
 function dgacStyle(feature){
 
     const z = window.map?.getZoom() || 10;
+    const restriction = feature.properties.restriction;
 
-    const isClose = z > 14;
+    // couleurs aviation standard
+    const isProhibited = restriction === "PROHIBITED";
+
+    const baseColor = isProhibited
+        ? "#ff2d2d"   // rouge interdit
+        : "#ff9800";  // orange restreint
 
     return {
-        color: "#ff0000",
-        weight: isClose ? 3 : 2,
-        fillColor: "#ff0000",
-        fillOpacity: isClose ? 0.08 : getDGACOpacity(),
-        opacity: 0.9
+        color: baseColor,
+        weight: z > 13 ? 2.5 : 1.5,
+        opacity: 0.9,
+
+        fillColor: baseColor,
+
+        // vue large → visible / zoom proche → discret
+        fillOpacity: getDGACOpacity(),
+
+        // améliore performance canvas
+        smoothFactor: 1
     };
 }
 

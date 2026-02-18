@@ -1,71 +1,23 @@
 /**
- * OPENAIP.JS — Aviation Airspaces Overlay
- * Version OPS production stable
- * Compatible MAP.JS layer control
+ * OPENAIP.JS — Aviation Airspaces Tiles Overlay
+ * Version PRO STABLE (GitHub Pages safe)
+ * Utilise OpenAIP Tiles API (PNG)
  */
 
 const OPENAIP_KEY = "db8fd47e611ac318fc7716c10311d4f2";
 
-let lastFetchPosition = null;
-let fetchInProgress = false;
+let openAipTiles = null;
 
 
 // =============================
-// LOAD AIRSPACES
+// INIT OPENAIP TILES
 // =============================
 
-async function loadOpenAIPAirspaces(lat, lon){
-
-    if(!window.map || !lat || !lon) return;
-    if(fetchInProgress) return;
-
-    // éviter reload si déplacement < 5km
-    if(lastFetchPosition){
-        const d = distanceKm(
-            lat, lon,
-            lastFetchPosition.lat,
-            lastFetchPosition.lon
-        );
-        if(d < 5) return;
-    }
-
-    fetchInProgress = true;
-    lastFetchPosition = {lat, lon};
-
-    try{
-
-        const bbox = buildBBoxKm(lat, lon, 80);
-
-        const res = await fetch(
-            `https://api.core.openaip.net/api/airspaces?bbox=${bbox}&limit=500`,
-            { headers:{ "x-openaip-api-key": OPENAIP_KEY } }
-        );
-
-        if(!res.ok){
-            console.warn("OpenAIP API error:", res.status);
-            return;
-        }
-
-        const data = await res.json();
-        if(!data?.items?.length) return;
-
-        renderAirspaces(data.items);
-
-    }catch(e){
-        console.error("OpenAIP error:", e);
-    }
-    finally{
-        fetchInProgress = false;
-    }
-}
-
-
-// =============================
-// RENDER MAP
-// =============================
-function renderAirspaces(items){
+function initOpenAIPLayer(){
 
     if(!window.map || !window.openAipLayer) return;
+
+    console.log("✈️ Initialisation OpenAIP tiles");
 
     // sécurité pane
     if(!map.getPane("zonesPane")){
@@ -73,126 +25,31 @@ function renderAirspaces(items){
         map.getPane("zonesPane").style.zIndex = 650;
     }
 
-    // clear propre
-    try{
-        window.openAipLayer.clearLayers();
-    }catch(e){}
+    // éviter double chargement
+    if(openAipTiles) return;
 
-    const features = [];
+    openAipTiles = L.tileLayer(
+        "https://{s}.api.tiles.openaip.net/api/data/openaip/{z}/{x}/{y}.png?apiKey=" + OPENAIP_KEY,
+        {
+            subdomains:["a","b","c"],
+            pane:"zonesPane",
+            opacity:0.75,
+            maxZoom:18,
+            attribution:'© <a href="https://www.openaip.net">OpenAIP</a>'
+        }
+    );
 
-    items.forEach(a=>{
-        if(!a.geometry?.coordinates) return;
-
-        features.push({
-            type:"Feature",
-            geometry:a.geometry,
-            properties:{
-                name:a.name,
-                class:a.airspaceClass,
-                lower:a.lowerLimit?.value || "",
-                upper:a.upperLimit?.value || ""
-            }
-        });
-    });
-
-    const geoLayer = L.geoJSON({
-        type:"FeatureCollection",
-        features
-    },{
-        pane:"zonesPane",
-        renderer:L.canvas(),
-        style:getAirspaceStyle,
-        onEachFeature:bindAirspacePopup
-    });
-
-    // injecte dans layer map.js
-    window.openAipLayer.addLayer(geoLayer);
-}
-
-
-
-
-// =============================
-// STYLE ICAO
-// =============================
-
-function getAirspaceStyle(feature){
-
-    const zoom = window.map.getZoom();
-    const c = feature.properties.class;
-
-    let opacity = 0.03;
-    if(zoom>9) opacity=0.06;
-    if(zoom>11) opacity=0.12;
-    if(zoom>13) opacity=0.25;
-
-    return{
-        color:
-            c==="CTR" ? "#ef4444" :
-            c==="TMA" ? "#f59e0b" :
-            c==="D"   ? "#ef4444" :
-            c==="R"   ? "#f97316" :
-            c==="P"   ? "#dc2626" :
-            c==="C"   ? "#38bdf8" :
-            "#64748b",
-
-        weight: zoom>12 ? 2 : 1,
-        fillOpacity: opacity
-    };
+    window.openAipLayer.addLayer(openAipTiles);
 }
 
 
 // =============================
-// POPUP ICAO
+// UPDATE POSITION (compat MAP.JS)
 // =============================
 
-function bindAirspacePopup(feature, layer){
-
-    const p = feature.properties;
-
-    layer.bindPopup(`
-        <div class="oaci-popup">
-            <div class="oaci-title">${p.name || "Airspace"}</div>
-            <div class="oaci-status">${p.class || ""}</div>
-            <div>⬆ ${p.upper || "?"}</div>
-            <div>⬇ ${p.lower || "?"}</div>
-        </div>
-    `);
-}
-
-
-// =============================
-// BBOX KM
-// =============================
-
-function buildBBoxKm(lat, lon, km){
-    const latDiff = km / 111;
-    const lonDiff = km / (111 * Math.cos(lat*Math.PI/180));
-    return [
-        lon-lonDiff,
-        lat-latDiff,
-        lon+lonDiff,
-        lat+latDiff
-    ].join(",");
-}
-
-
-// =============================
-// DISTANCE KM
-// =============================
-
-function distanceKm(lat1,lon1,lat2,lon2){
-    const R=6371;
-    const dLat=(lat2-lat1)*Math.PI/180;
-    const dLon=(lon2-lon1)*Math.PI/180;
-
-    const a=
-        Math.sin(dLat/2)**2 +
-        Math.cos(lat1*Math.PI/180) *
-        Math.cos(lat2*Math.PI/180) *
-        Math.sin(dLon/2)**2;
-
-    return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+function loadOpenAIPAirspaces(){
+    // plus besoin de fetch — tiles auto
+    if(!openAipTiles) initOpenAIPLayer();
 }
 
 
@@ -204,16 +61,21 @@ function initOpenAIPAutoUpdate(){
 
     if(!window.map) return;
 
-    window.map.on("moveend",()=>{
-        const c = window.map.getCenter();
-        loadOpenAIPAirspaces(c.lat, c.lng);
+    initOpenAIPLayer();
+
+    // recharge si toggle layer
+    map.on("overlayadd", e=>{
+        if(e.name?.includes("OpenAIP")){
+            initOpenAIPLayer();
+        }
     });
 }
 
 
 // =============================
-// EXPORT
+// EXPORT GLOBAL
 // =============================
 
+window.initOpenAIPLayer = initOpenAIPLayer;
 window.loadOpenAIPAirspaces = loadOpenAIPAirspaces;
 window.initOpenAIPAutoUpdate = initOpenAIPAutoUpdate;

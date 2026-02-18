@@ -1,13 +1,9 @@
 /**
- * DGACZONES.JS — Affichage restrictions drones via WMS GeoPlateforme
- * Source IGN / DGAC (live)
+ * DGACZONES.JS — Restrictions drones via WFS GeoPlateforme (vecteur live)
  */
 
 let dgacLayer = null;
 
-/**
- * Charge la couche DGAC depuis le WMS GeoPlateforme
- */
 async function loadDGACZones() {
     if (dgacLayer) return dgacLayer;
 
@@ -17,32 +13,67 @@ async function loadDGACZones() {
     }
 
     try {
-        console.log("🛰️ Chargement WMS DGAC...");
+        console.log("🛰️ Chargement WFS DGAC...");
 
-        dgacLayer = L.tileLayer.wms(
-            "https://data.geopf.fr/wms-r",
-            {
-                layers: "TRANSPORTS.DRONES.RESTRICTIONS",
-                format: "image/png",
-                transparent: true,
-                version: "1.3.0",
-                attribution: "DGAC / IGN Géoplateforme",
-                pane: "zonesPane",
-                opacity: 0.7
+        // bbox de la carte (optimise perf)
+        const bounds = window.map.getBounds();
+        const bbox = [
+            bounds.getWest(),
+            bounds.getSouth(),
+            bounds.getEast(),
+            bounds.getNorth()
+        ].join(",");
+
+        const url = `
+https://data.geopf.fr/wfs/ows
+?service=WFS
+&version=2.0.0
+&request=GetFeature
+&typeName=TRANSPORTS.DRONES.RESTRICTIONS:carte_restriction_drones_lf
+&outputFormat=application/json
+&srsName=EPSG:4326
+&bbox=${bbox},EPSG:4326
+`.replace(/\s+/g, "");
+
+        const response = await fetch(url);
+        const geojson = await response.json();
+
+        dgacLayer = L.geoJSON(geojson, {
+            pane: "zonesPane",
+
+            style(feature) {
+                const alt = feature.properties?.limite_alti ?? 0;
+
+                return {
+                    color: alt === 0 ? "#ff0000" : "#ff9800",
+                    fillColor: alt === 0 ? "#ff0000" : "#ff9800",
+                    weight: 2,
+                    fillOpacity: 0.3
+                };
+            },
+
+            onEachFeature(feature, layer) {
+                const p = feature.properties || {};
+
+                layer.bindPopup(`
+                    <b>Restriction UAS</b><br>
+                    Zone : ${p.nom || "?"}<br>
+                    Altitude max : ${p.limite_alti ?? "?"} m
+                `);
             }
-        );
+        });
 
-        console.log("✅ Couche DGAC WMS prête");
+        console.log("✅ WFS DGAC chargé");
         return dgacLayer;
 
-    } catch (error) {
-        console.error("❌ Erreur WMS DGAC :", error);
+    } catch (err) {
+        console.error("❌ Erreur WFS DGAC", err);
         return null;
     }
 }
 
 /**
- * Ajoute la couche au contrôle checkbox
+ * Ajoute au layerControl
  */
 async function addDGACToLayerControl() {
     const layer = await loadDGACZones();
@@ -50,16 +81,15 @@ async function addDGACToLayerControl() {
 
     if (!window.overlayMaps) window.overlayMaps = {};
 
-    window.overlayMaps["Zones DGAC (UAS)"] = layer;
+    window.overlayMaps["Zones DGAC (WFS)"] = layer;
 
     if (!window.layerControl) {
         window.layerControl = L.control.layers(
             window.baseMaps || {},
-            window.overlayMaps,
-            { collapsed: false }
+            window.overlayMaps
         ).addTo(window.map);
     } else {
-        window.layerControl.addOverlay(layer, "Zones DGAC (UAS)");
+        window.layerControl.addOverlay(layer, "Zones DGAC (WFS)");
     }
 }
 

@@ -1,7 +1,6 @@
 /**
  * MAP.JS — Drone OPS Tactical Map
- * STABLE VERSION
- * OSM + IGN OACI + OpenAIP + DGAC UAS
+ * WMTS global + WFS dynamique cliquable
  */
 
 let map = null;
@@ -9,14 +8,14 @@ let positionMarker = null;
 
 let osmLayer = null;
 let oaciLayer = null;
+let dgacWmtsLayer = null;
+let dgacVectorLayer = null;
 
 // ================= INIT MAP =================
 
 async function initMap() {
 
     if (!document.getElementById("map")) return;
-
-    // évite double init
     if (map) return;
 
     console.log("🗺️ Initialisation carte");
@@ -31,150 +30,83 @@ async function initMap() {
 
     window.map = map;
 
-    // ================= PANE PRIORITÉ ZONES DGAC =================
+    // ================= PANE VECTEUR DGAC =================
 
-    if (!map.getPane("zonesPane")) {
-        map.createPane("zonesPane");
+    map.createPane("zonesPane");
+    map.getPane("zonesPane").style.zIndex = 650;
 
-        const pane = map.getPane("zonesPane");
-        pane.style.zIndex = 650;           // au-dessus des tiles
-        pane.style.pointerEvents = "auto"; // autorise clic
-    }
-
-    // ================= FOND OSM =================
+    // ================= OSM =================
 
     osmLayer = L.tileLayer(
         "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        {
-            maxZoom: 19,
-            attribution: "© OpenStreetMap"
-        }
+        { maxZoom: 19 }
     ).addTo(map);
 
-    // ================= IGN OACI =================
+    // ================= OACI =================
 
-    try {
-        oaciLayer = L.tileLayer(
-            "https://data.geopf.fr/private/tms/1.0.0/" +
-            "GEOGRAPHICALGRIDSYSTEMS.MAPS.SCAN-OACI/{z}/{x}/{y}.jpeg" +
-            "?apikey=8Y5CE2vg2zJMePOhqeHYhXx4fmI3uzpz",
-            {
-                opacity: 0.7,
-                maxZoom: 16,
-                attribution: "© IGN OACI"
-            }
-        ).addTo(map);
+    oaciLayer = L.tileLayer(
+        "https://data.geopf.fr/private/tms/1.0.0/" +
+        "GEOGRAPHICALGRIDSYSTEMS.MAPS.SCAN-OACI/{z}/{x}/{y}.jpeg" +
+        "?apikey=8Y5CE2vg2zJMePOhqeHYhXx4fmI3uzpz",
+        { opacity: 0.7 }
+    );
+
+    // ================= DGAC WMTS (FRANCE COMPLETE) =================
+    // affichage global ultra rapide
+
+    dgacWmtsLayer = L.tileLayer(
+        "https://data.geopf.fr/wmts?" +
+        "SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0" +
+        "&LAYER=DGAC_RESTRICTIONS-UAS" +
+        "&STYLE=normal" +
+        "&TILEMATRIXSET=PM" +
+        "&FORMAT=image/png" +
+        "&TILEMATRIX={z}" +
+        "&TILEROW={y}" +
+        "&TILECOL={x}",
+        { opacity: 0.55 }
+    ).addTo(map);
+
+    // ================= DGAC VECTEUR CLIQUABLE =================
+
+    if (typeof window.loadDGACZones === "function") {
+        dgacVectorLayer = await window.loadDGACZones();
+        dgacVectorLayer.addTo(map);
     }
-    catch (e) {
-        console.warn("OACI non disponible");
-    }
-map.on("zoomend", () => {
 
-    const z = map.getZoom();
+    // ================= CHARGEMENT DYNAMIQUE WFS =================
+    // vecteur seulement si zoom élevé
 
-    if (z < 8) {
-        if (window.dgacLayer) window.dgacLayer.clearLayers();
-        return;
-    }
+    map.on("moveend zoomend", () => {
 
-    if (typeof loadDGACForBounds === "function") {
-        loadDGACForBounds();
-    }
-});
+        if (map.getZoom() < 9) {
+            dgacVectorLayer?.clearLayers();
+            return;
+        }
 
-    // ================= OPENAIP LAYER =================
+        if (typeof window.loadDGACForBounds === "function") {
+            window.loadDGACForBounds();
+        }
+    });
+
+    // ================= OPENAIP =================
 
     window.openAipLayer = L.layerGroup().addTo(map);
 
-    // ================= CHARGEMENT DGAC =================
-
-    let dgacLayer = null;
-
-    if (typeof window.loadDGACZones === "function") {
-        try {
-            dgacLayer = await window.loadDGACZones();
-
-            if (dgacLayer) {
-                dgacLayer.addTo(map); // actif par défaut
-                console.log("✅ DGAC chargé");
-            }
-
-        } catch (e) {
-            console.error("DGAC load error", e);
-        }
-    }
-
     // ================= CONTROLE COUCHES =================
 
-    const baseMaps = {
-        "Fond OSM": osmLayer
-    };
-
-    const overlays = {
-        "Carte OACI IGN": oaciLayer,
-        "Espaces aériens OpenAIP": window.openAipLayer
-    };
-
-    if (dgacLayer) {
-        overlays["Restrictions DGAC (UAS)"] = dgacLayer;
-    }
-
-    L.control.layers(baseMaps, overlays, {
-        collapsed: false
-    }).addTo(map);
-
-    // ================= AUTO INIT OPENAIP =================
-
-    setTimeout(() => {
-        if (typeof initOpenAIPAutoUpdate === "function") {
-            initOpenAIPAutoUpdate();
-        }
-    }, 500);
+    L.control.layers(
+        { "Fond OSM": osmLayer },
+        {
+            "Carte OACI IGN": oaciLayer,
+            "DGAC Global": dgacWmtsLayer,
+            "DGAC Cliquable": dgacVectorLayer,
+            "Espaces aériens OpenAIP": window.openAipLayer
+        },
+        { collapsed: false }
+    ).addTo(map);
 
     console.log("✅ MAP READY");
 }
 
-// ================= UPDATE POSITION =================
-
-function updateMapPosition(lat, lon) {
-
-    if (!map || !lat || !lon) return;
-
-    map.flyTo([lat, lon], 11, { duration: 0.6 });
-
-    if (positionMarker) {
-        map.removeLayer(positionMarker);
-    }
-
-    positionMarker = L.circle([lat, lon], {
-        radius: 500,
-        color: "#38bdf8",
-        weight: 2,
-        fillOpacity: 0.15
-    }).addTo(map);
-
-    if (typeof loadOpenAIPAirspaces === "function") {
-        loadOpenAIPAirspaces(lat, lon);
-    }
-}
-
-// ================= OPENAIP SUPPORT =================
-
-function setOpenAIPLayer(layer) {
-
-    if (!window.openAipLayer) return;
-
-    try {
-        window.openAipLayer.clearLayers();
-        if (layer) window.openAipLayer.addLayer(layer);
-    }
-    catch (e) {
-        console.warn("OpenAIP layer error", e);
-    }
-}
-
-// ================= EXPORT GLOBAL =================
-
 window.initMap = initMap;
-window.updateMapPosition = updateMapPosition;
-window.setOpenAIPLayer = setOpenAIPLayer;

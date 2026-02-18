@@ -57,18 +57,31 @@ async function initMap() {
     ).addTo(map);
 
     // ================= OACI =================
+// ================= OACI =================
+
+try {
 
     oaciLayer = L.tileLayer(
         "https://data.geopf.fr/private/tms/1.0.0/" +
         "GEOGRAPHICALGRIDSYSTEMS.MAPS.SCAN-OACI/{z}/{x}/{y}.jpeg" +
         "?apikey=8Y5CE2vg2zJMePOhqeHYhXx4fmI3uzpz",
         {
-            pane:"oaciPane",
-            opacity:0.7,
-            maxZoom:16,
-            attribution:"© IGN OACI"
+            pane: "oaciPane",
+            opacity: 0.7,
+            maxZoom: 16,
+            attribution: "© IGN OACI"
         }
-    ).addTo(map);
+    );
+
+    // 🔥 IMPORTANT — ajouter explicitement
+    oaciLayer.addTo(map);
+
+    console.log("✅ OACI chargé");
+
+} catch (e) {
+    console.warn("❌ OACI non disponible", e);
+}
+
 
     // ================= DGAC WMTS (visuel global France) =================
     // ⚠️ nécessite vraie clé IGN

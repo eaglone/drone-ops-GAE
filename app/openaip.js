@@ -63,10 +63,9 @@ async function loadOpenAIPAirspaces(lat, lon){
 // =============================
 // RENDER MAP
 // =============================
-
 function renderAirspaces(items){
 
-    if(!window.map) return;
+    if(!window.map || !window.openAipLayer) return;
 
     // sécurité pane
     if(!map.getPane("zonesPane")){
@@ -74,9 +73,10 @@ function renderAirspaces(items){
         map.getPane("zonesPane").style.zIndex = 650;
     }
 
-    if(openAipLayer){
-        try{ openAipLayer.clearLayers(); }catch(e){}
-    }
+    // clear propre
+    try{
+        window.openAipLayer.clearLayers();
+    }catch(e){}
 
     const features = [];
 
@@ -95,17 +95,18 @@ function renderAirspaces(items){
         });
     });
 
-    openAipLayer = L.geoJSON({
+    const geoLayer = L.geoJSON({
         type:"FeatureCollection",
         features
     },{
         pane:"zonesPane",
-        renderer:L.canvas(), // ← IMPORTANT (évite bug renderer)
+        renderer:L.canvas(),
         style:getAirspaceStyle,
         onEachFeature:bindAirspacePopup
     });
 
-    openAipLayer.addTo(map);
+    // injecte dans layer map.js
+    window.openAipLayer.addLayer(geoLayer);
 }
 
 

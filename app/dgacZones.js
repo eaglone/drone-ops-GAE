@@ -6,8 +6,6 @@
  * - chargement progressif
  */
 
-import { loadDGAC, saveDGAC } from "./dgacCache.js";
-
 let dgacLayer = null;
 let selectedLayer = null;
 
@@ -160,6 +158,7 @@ worker.onmessage = e => {
     dgacLayer.addData(e.data);
     window.saveDGAC?.(e.data);
 };
+
 
 // STREAM WFS
 await fetchAllDGACFeaturesProgressive(batch => {

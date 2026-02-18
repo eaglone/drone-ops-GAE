@@ -1,9 +1,5 @@
 /**
  * DGACZONES.JS — DGAC France entière optimisé
- * - pagination WFS
- * - cache IndexedDB
- * - worker simplification
- * - chargement progressif
  */
 
 let dgacLayer = null;
@@ -14,26 +10,28 @@ const TYPE_NAME = "TRANSPORTS.DRONES.RESTRICTIONS:carte_restriction_drones_lf";
 const PAGE_SIZE = 5000;
 
 
-// ================= STREAM WFS =================
+// ================= FETCH WFS =================
 
 async function fetchAllDGACFeaturesProgressive(onBatch) {
 
     let startIndex = 0;
-    let all = [];
 
     while (true) {
 
         console.log("📡 WFS batch", startIndex);
 
-        const url = `${WFS_URL}?service=WFS&version=2.0.0&request=GetFeature&typeName=${TYPE_NAME}&outputFormat=application/json&srsName=EPSG:4326&count=${PAGE_SIZE}&startIndex=${startIndex}`;
+        const url =
+            `${WFS_URL}?service=WFS&version=2.0.0&request=GetFeature` +
+            `&typeName=${TYPE_NAME}` +
+            `&outputFormat=application/json` +
+            `&srsName=EPSG:4326` +
+            `&count=${PAGE_SIZE}&startIndex=${startIndex}`;
 
         const res = await fetch(url);
         if (!res.ok) throw new Error("Erreur WFS");
 
         const data = await res.json();
         if (!data.features?.length) break;
-
-        all = all.concat(data.features);
 
         onBatch({
             type: "FeatureCollection",
@@ -44,13 +42,6 @@ async function fetchAllDGACFeaturesProgressive(onBatch) {
 
         startIndex += PAGE_SIZE;
     }
-
-    console.log("✅ Total DGAC:", all.length);
-
-    return {
-        type: "FeatureCollection",
-        features: all
-    };
 }
 
 
@@ -92,12 +83,10 @@ function onEachDGACFeature(feature, layer) {
             ? "🚫 VOL INTERDIT"
             : `✅ Autorisé jusqu’à ${altitude} m`;
 
-    const defaultStyle = dgacStyle(feature);
-
     layer.on("click", e => {
 
         if (selectedLayer) {
-            selectedLayer.setStyle(defaultStyle);
+            selectedLayer.setStyle(dgacStyle(feature));
         }
 
         selectedLayer = layer;
@@ -109,8 +98,7 @@ function onEachDGACFeature(feature, layer) {
 <b>RESTRICTION DRONE DGAC</b><hr>
 <b>Statut :</b> ${statut}<br>
 <b>Zone :</b> ${zoneName}<br>
-<b>Altitude :</b> ${altitude} m AGL<br>
-<small>IGN / DGAC</small>
+<b>Altitude :</b> ${altitude} m AGL
 `)
             .openOn(window.map);
     });
@@ -123,12 +111,9 @@ async function loadDGACZones() {
 
     if (dgacLayer) return dgacLayer;
 
-    if (!window.map) {
-        console.error("Map non initialisée");
-        return null;
-    }
+    if (!window.map) return null;
 
-    console.log("🛰️ Initialisation DGAC optimisé...");
+    console.log("🛰️ Chargement DGAC...");
 
     dgacLayer = L.geoJSON(null, {
         pane: "zonesPane",
@@ -137,16 +122,16 @@ async function loadDGACZones() {
         interactive: true
     });
 
-    // CACHE FIRST
+    // cache
     const cached = await window.loadDGAC?.();
 
     if (cached) {
-        console.log("⚡ DGAC depuis cache");
+        console.log("⚡ DGAC cache");
         dgacLayer.addData(cached);
         return dgacLayer;
     }
 
-    // WORKER
+    // worker
     const worker = new Worker("app/dgacWorkers.js");
 
     worker.onmessage = e => {
@@ -154,38 +139,14 @@ async function loadDGACZones() {
         window.saveDGAC?.(e.data);
     };
 
-    // STREAM WFS
     await fetchAllDGACFeaturesProgressive(batch => {
         worker.postMessage(batch);
     });
 
-    return dgacLayer; // 🔥 manquait logique avant
+    return dgacLayer;
 }
 
 
-// ================= LAYER CONTROL =================
-
-async function addDGACToLayerControl() {
-
-    const layer = await loadDGACZones();
-    if (!layer) return;
-
-    if (!window.overlayMaps) window.overlayMaps = {};
-
-    window.overlayMaps["Restrictions DGAC (France)"] = layer;
-
-    if (!window.layerControl) {
-        window.layerControl = L.control.layers(
-            window.baseMaps || {},
-            window.overlayMaps
-        ).addTo(window.map);
-    } else {
-        window.layerControl.addOverlay(layer, "Restrictions DGAC (France)");
-    }
-}
-
-
-// ================= EXPORT GLOBAL =================
+// ================= EXPORT =================
 
 window.loadDGACZones = loadDGACZones;
-window.addDGACToLayerControl = addDGACToLayerControl;

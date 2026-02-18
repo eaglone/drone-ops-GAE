@@ -1,63 +1,138 @@
+/**
+ * MAP.JS — Drone OPS
+ * Version stable GitHub + OACI + zones
+ */
+
 let map = null;
 let positionMarker = null;
 
-// couches globales
-let allowedLayer;
-let restrictionLayer;
-let uasLayer;
 
-
-// ================= INIT MAP =================
+// =============================
+// INIT MAP
+// =============================
 
 function initMap(){
 
-    if (!document.getElementById("map")) return;
+    if(!document.getElementById("map")) return;
 
-    map = L.map("map").setView([window.latitude, window.longitude], 10);
+    console.log("INIT MAP...");
 
-    // fond carte
-    const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19
-    }).addTo(map);
+    map = L.map("map",{
+        zoomControl:true
+    }).setView(
+        [window.latitude || 48.78, window.longitude || 2.22],
+        10
+    );
 
-    // priorité zones
+// ===============================
+// ⭐ FOND OACI IGN AVEC TA CLÉ API
+// ===============================
+
+const oaciLayer = L.tileLayer(
+  "https://data.geopf.fr/private/wmts?" +
+  "SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0" +
+  "&LAYER=GEOGRAPHICALGRIDSYSTEMS.MAPS.SCAN-OACI" +
+  "&STYLE=normal" +
+  "&TILEMATRIXSET=PM" +
+  "&FORMAT=image/jpeg" +
+  "&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}" +
+  "&apikey=8Y5CE2vg2zJMePOhqeHYhXx4fmI3uzpz",
+  {
+    attribution:"© IGN — Carte OACI",
+    maxZoom:18,
+    minZoom:5,
+    crossOrigin:true
+  }
+).addTo(map);
+
+
+    // ===============================
+    // PANES PRIORITÉ
+    // ===============================
+
+    // zones aériennes
     map.createPane("zonesPane");
     map.getPane("zonesPane").style.zIndex = 650;
 
-    // groupes couches
-    allowedLayer = L.layerGroup()
-    restrictionLayer = L.layerGroup().addTo(map);
-    uasLayer = L.layerGroup();
+    // position utilisateur
+    map.createPane("markerPane");
+    map.getPane("markerPane").style.zIndex = 700;
 
-    // contrôle affichage
-    L.control.layers(
-        { "OpenStreetMap": osm },
-        {
-            "Limites départements": allowedLayer,
-            "Restrictions": restrictionLayer,
-            "Zones UAS": uasLayer
-        },
-        { collapsed:false }
-    ).addTo(map);
+
+    // ===============================
+    // CHARGEMENT ZONES
+    // ===============================
+
+    if(typeof loadAllZones === "function"){
+        console.log("Chargement zones...");
+        loadAllZones();
+    }
+
+
+    // ===============================
+    // POSITION INITIALE
+    // ===============================
+
+    updateMapPosition(
+        window.latitude || 48.78,
+        window.longitude || 2.22
+    );
+
+
+    console.log("MAP READY");
 }
 
 
-// ================= UPDATE POSITION =================
+// =============================
+// UPDATE POSITION
+// =============================
 
 function updateMapPosition(lat, lon){
 
     if(!map) return;
 
-    map.flyTo([lat, lon], 11, {duration:0.6});
+    // déplacement doux
+    map.flyTo([lat, lon], 11, {
+        duration:0.6
+    });
 
-    if(positionMarker) map.removeLayer(positionMarker);
+    // supprimer ancien marker
+    if(positionMarker){
+        map.removeLayer(positionMarker);
+    }
 
-    positionMarker = L.circle([lat, lon], {
+    // cercle position
+    positionMarker = L.circle([lat, lon],{
+        pane:"markerPane",
         radius:500,
         color:"#38bdf8",
+        weight:2,
         fillOpacity:0.15
     }).addTo(map);
 
-    updateRadar?.(lat, lon);
+    // radar pluie si présent
+    if(typeof updateRadar === "function"){
+        updateRadar(lat, lon);
+    }
+
+    console.log("Position MAJ:",lat,lon);
 }
 
+
+// =============================
+// UTILITAIRE — CENTRER
+// =============================
+
+function centerMap(lat,lon,zoom=11){
+    if(!map) return;
+    map.setView([lat,lon],zoom);
+}
+
+
+// =============================
+// EXPORT GLOBAL
+// =============================
+
+window.initMap = initMap;
+window.updateMapPosition = updateMapPosition;
+window.centerMap = centerMap;

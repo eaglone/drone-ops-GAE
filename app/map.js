@@ -1,8 +1,7 @@
 /**
  * MAP.JS — Drone OPS Tactical Map
  * PRODUCTION STABLE
- * OSM + IGN OACI + OpenAIP Tiles
- * GitHub Pages safe
+ * OSM + IGN OACI + OpenAIP Tiles + DGAC UAS
  */
 
 let map = null;
@@ -11,10 +10,9 @@ let positionMarker = null;
 let osmLayer = null;
 let oaciLayer = null;
 
-
 // ================= INIT MAP =================
 
-function initMap(){
+async function initMap(){ // Ajout de async pour le chargement des zones
 
     if(!document.getElementById("map")) return;
 
@@ -33,14 +31,12 @@ function initMap(){
 
     window.map = map;
 
-
     // ================= PANE PRIORITÉ ZONES =================
 
     if(!map.getPane("zonesPane")){
         map.createPane("zonesPane");
         map.getPane("zonesPane").style.zIndex = 650;
     }
-
 
     // ================= FOND OSM (toujours safe)
 
@@ -51,7 +47,6 @@ function initMap(){
             attribution:"© OpenStreetMap"
         }
     ).addTo(map);
-
 
     // ================= IGN OACI (overlay aviation)
 
@@ -71,11 +66,18 @@ function initMap(){
         console.warn("OACI non disponible");
     }
 
-
-    // ================= OPENAIP LAYER GLOBAL (OBLIGATOIRE)
+    // ================= OPENAIP LAYER GLOBAL
 
     window.openAipLayer = L.layerGroup().addTo(map);
 
+    // ================= CHARGEMENT COUCHE DGAC (MANUEL) =================
+
+    let dgacLayer = null;
+    if(typeof window.loadDGACZones === "function"){
+        // On charge la couche mais on ne l'ajoute PAS à la map (.addTo(map))
+        // On la récupère juste pour le menu
+        dgacLayer = await window.loadDGACZones();
+    }
 
     // ================= CONTROLE COUCHES
 
@@ -88,10 +90,14 @@ function initMap(){
         "Espaces aériens OpenAIP": window.openAipLayer
     };
 
-    L.control.layers(baseMaps, overlays, {
-        collapsed:false
-    }).addTo(map);
+    // Si la couche DGAC a bien été chargée, on l'ajoute aux overlays
+    if(dgacLayer){
+        overlays["Restrictions DGAC (UAS)"] = dgacLayer;
+    }
 
+    L.control.layers(baseMaps, overlays, {
+        collapsed:false // Menu ouvert par défaut pour l'aspect tactique
+    }).addTo(map);
 
     // ================= AUTO INIT OPENAIP
 
@@ -101,16 +107,12 @@ function initMap(){
         }
     },500);
 
-
     console.log("✅ MAP READY");
 }
-
-
 
 // ================= UPDATE POSITION =================
 
 function updateMapPosition(lat,lon){
-
     if(!map || !lat || !lon) return;
 
     map.flyTo([lat,lon],11,{duration:0.6});
@@ -132,14 +134,10 @@ function updateMapPosition(lat,lon){
     }
 }
 
-
-
 // ================= OPENAIP LAYER CONTROL (legacy support)
 
 function setOpenAIPLayer(layer){
-
     if(!window.openAipLayer) return;
-
     try{
         window.openAipLayer.clearLayers();
         if(layer) window.openAipLayer.addLayer(layer);
@@ -149,10 +147,7 @@ function setOpenAIPLayer(layer){
     }
 }
 
-
-
 // ================= EXPORT GLOBAL
-
 window.initMap = initMap;
 window.updateMapPosition = updateMapPosition;
 window.setOpenAIPLayer = setOpenAIPLayer;

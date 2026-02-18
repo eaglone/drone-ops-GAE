@@ -91,12 +91,15 @@ async function loadDGACZones(){
 
         const data = await res.json();
 
-        const geojson = convertUASZonesToGeoJSON(data);
+       const geojson = convertUASZonesToGeoJSON(raw);
 
-        dgacLayer = L.geoJSON(geojson,{
-            pane:"zonesPane",
-            style:dgacStyle
-        });
+dgacLayer = L.geoJSON(geojson,{
+    pane:"zonesPane",
+    style:dgacStyle,
+    onEachFeature:onEachDGACFeature
+});
+
+
 
         console.log("✅ DGAC chargé");
 

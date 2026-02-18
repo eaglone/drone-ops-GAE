@@ -147,10 +147,11 @@ function safeCall(fnName){
 }
 
 // ================================
-// SERVICE WORKER
+// SERVICE WORKER (désactivé temporairement)
 // ================================
-if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js")
-        .then(() => console.log("Service Worker: Registered"))
-        .catch(err => console.error("Service Worker: Error", err));
-}
+
+// if ("serviceWorker" in navigator) {
+//     navigator.serviceWorker.register("sw.js")
+//         .then(() => console.log("Service Worker: Registered"))
+//         .catch(err => console.error("Service Worker: Error", err));
+// }

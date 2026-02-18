@@ -128,9 +128,9 @@ if(typeof window.loadDGACZones === "function"){
     "Espaces aériens OpenAIP": window.openAipLayer
 };
 
-
-   // ne PAS ajouter automatiquement
-// dgacLayer.addTo(map);  <-- supprime ça
+if(dgacLayer){
+    overlays["DGAC Zones cliquables (avancé)"] = dgacLayer;
+}
 
 
     L.control.layers(baseMaps, overlays, {

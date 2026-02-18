@@ -175,7 +175,15 @@ function startRadarAnimation(){
 
 }
 
-
+// Générateur d'URL RainViewer (RainWeather)
+function buildRadarURL(path) {
+    // Configuration : 256px / tuile / Color 2 (Universal Blue) / Smooth 1 / Snow 1
+    return `https://tilecache.rainviewer.com${path}/256/{z}/{x}/{y}/2/1_1.png`;
+}// Générateur d'URL RainViewer (RainWeather)
+function buildRadarURL(path) {
+    // Configuration : 256px / tuile / Color 2 (Universal Blue) / Smooth 1 / Snow 1
+    return `https://tilecache.rainviewer.com${path}/256/{z}/{x}/{y}/2/1_1.png`;
+}
 
 
 // =====================================================

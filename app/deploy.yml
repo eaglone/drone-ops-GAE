@@ -1,0 +1,34 @@
+name: Deploy Drone OPS to GitHub Pages
+
+on:
+  push:
+    branches: ["main"] # S'exécute à chaque push sur la branche principale
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Inject API Key
+        run: |
+          # Remplace la balise par la valeur du secret dans map.js
+          sed -i "s/__METEO_FRANCE_API_KEY__/${{ secrets.METEO_FRANCE_API_KEY }}/g" app/map.js
+        # Remplace 'app/map.js' par le chemin réel vers ton fichier
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.' # Dossier racine du projet
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4

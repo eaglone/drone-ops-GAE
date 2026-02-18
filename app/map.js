@@ -19,58 +19,43 @@ let rainRadarLayer = null;
 
 
 // ================= RADAR PLUIE =================
-
-// ================= RADAR PLUIE ANIMÉ =================
+// ================= RADAR PLUIE ANIMÉ PRO =================
 
 let rainRadarLayer = null;
-let rainAnimationTimer = null;
+let radarFrames = [];
+let radarIndex = 0;
+let radarTimer = null;
 
 async function initRainRadar(){
 
     if(rainRadarLayer) return rainRadarLayer;
 
-    console.log("🌧️ Radar pluie animé");
+    console.log("🌧️ Init Rain Radar PRO");
 
     try{
-
         const res = await fetch("https://api.rainviewer.com/public/weather-maps.json");
         const data = await res.json();
 
-        if(!data?.radar?.past) throw new Error("Radar indisponible");
+        // dernières 8 frames pour animation fluide
+        radarFrames = data?.radar?.past?.slice(-8) || [];
 
-        // dernières frames radar (10 images)
-        const frames = data.radar.past.slice(-10);
+        if(!radarFrames.length){
+            throw new Error("Pas de frame radar");
+        }
 
-        let frameIndex = 0;
-
-        // layer initial
         rainRadarLayer = L.tileLayer(
-            `https://tilecache.rainviewer.com${frames[0].path}/256/{z}/{x}/{y}/2/1_1.png`,
+            buildRadarURL(radarFrames[0].path),
             {
-                opacity:0.65,
-                pane:"airspacePane",
-                maxZoom:18,
-                attribution:"© RainViewer"
+                opacity: 0.65,
+                pane: "airspacePane",
+                maxZoom: 12,          // empêche disparition zoom
+                updateWhenZooming: false,
+                updateWhenIdle: true,
+                attribution: "© RainViewer"
             }
         );
 
-        // animation boucle
-        function startAnimation(){
-
-            if(rainAnimationTimer) clearInterval(rainAnimationTimer);
-
-            rainAnimationTimer = setInterval(()=>{
-
-                frameIndex = (frameIndex + 1) % frames.length;
-
-                rainRadarLayer.setUrl(
-                    `https://tilecache.rainviewer.com${frames[frameIndex].path}/256/{z}/{x}/{y}/2/1_1.png`
-                );
-
-            }, 700); // vitesse animation (ms)
-        }
-
-        startAnimation();
+        startRadarAnimation();
 
         return rainRadarLayer;
 
@@ -80,6 +65,29 @@ async function initRainRadar(){
     }
 }
 
+function buildRadarURL(path){
+    return `https://tilecache.rainviewer.com${path}/256/{z}/{x}/{y}/2/1_1.png`;
+}
+
+function startRadarAnimation(){
+
+    if(radarTimer) clearInterval(radarTimer);
+
+    radarTimer = setInterval(()=>{
+
+        radarIndex++;
+        if(radarIndex >= radarFrames.length){
+            radarIndex = 0;
+        }
+
+        if(rainRadarLayer){
+            rainRadarLayer.setUrl(
+                buildRadarURL(radarFrames[radarIndex].path)
+            );
+        }
+
+    }, 600); // vitesse animation (ms)
+}
 
 
 

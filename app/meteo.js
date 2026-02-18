@@ -26,7 +26,8 @@ let currentKP = null;
 async function loadKP(){
 
     try{
-        const r = await fetch(
+       const data = await cachedFetch("meteo_"+lat+"_"+lon, url);
+(
             "https://services.swpc.noaa.gov/json/planetary_k_index_1m.json"
         );
 

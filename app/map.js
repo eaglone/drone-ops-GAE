@@ -33,14 +33,20 @@ async function initRainRadar(){
         const frame = data?.radar?.past?.slice(-1)[0]?.path;
         if(!frame) throw new Error("Radar indisponible");
 
-        rainRadarLayer = L.tileLayer(
-            `https://tilecache.rainviewer.com${frame}/256/{z}/{x}/{y}/2/1_1.png`,
-            {
-                opacity:0.55,
-                pane:"weatherPane",
-                attribution:"© RainViewer"
-            }
-        );
+        rrainRadarLayer = L.tileLayer(
+  `https://tilecache.rainviewer.com${frame}/256/{z}/{x}/{y}/2/1_1.png`,
+  {
+    opacity:0.65,        // plus visible
+    pane:"airspacePane",
+    attribution:"© RainViewer",
+
+    maxZoom:12,          // ← radar détail max
+    minZoom:4,           // évite vue trop large
+    updateWhenZooming:false,
+    updateWhenIdle:true
+  }
+);
+
 
         return rainRadarLayer;
 

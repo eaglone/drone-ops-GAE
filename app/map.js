@@ -1,6 +1,7 @@
 /**
  * MAP.JS — Drone OPS Tactical Map
- * Mode OPS + contrôle couches utilisateur
+ * Version Production Stable
+ * IGN + OACI + OpenAIP + Layers Control
  */
 
 let map = null;
@@ -17,10 +18,19 @@ function initMap(){
 
     if (!document.getElementById("map")) return;
 
-    map = L.map("map").setView([window.latitude, window.longitude], 10);
+    // création carte
+    map = L.map("map", {
+        zoomControl: true
+    }).setView([window.latitude, window.longitude], 10);
+
+    // rendre accessible globalement (IMPORTANT)
+    window.map = map;
 
 
-    // ===== PRIORITÉ ZONES =====
+    // =============================
+    // PRIORITÉ ZONES
+    // =============================
+
     map.createPane("zonesPane");
     map.getPane("zonesPane").style.zIndex = 650;
 
@@ -38,12 +48,15 @@ function initMap(){
         "&FORMAT=image/png" +
         "&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}" +
         "&apikey=8Y5CE2vg2zJMePOhqeHYhXx4fmI3uzpz",
-        { maxZoom:18 }
+        {
+            maxZoom:18,
+            attribution:"© IGN GeoPF"
+        }
     ).addTo(map);
 
 
     // =============================
-    // OACI
+    // CARTE OACI AÉRONAUTIQUE
     // =============================
 
     ignOACI = L.tileLayer(
@@ -55,12 +68,15 @@ function initMap(){
         "&FORMAT=image/jpeg" +
         "&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}" +
         "&apikey=8Y5CE2vg2zJMePOhqeHYhXx4fmI3uzpz",
-        { opacity:0.7, maxZoom:15 }
+        {
+            opacity:0.7,
+            maxZoom:15
+        }
     );
 
 
     // =============================
-    // OPENAIP (vide au départ)
+    // OPENAIP GROUP (vide au départ)
     // =============================
 
     openAipLayer = L.layerGroup();
@@ -78,7 +94,9 @@ function initMap(){
         {
             "Espaces aériens OpenAIP": openAipLayer
         },
-        { collapsed:false }
+        {
+            collapsed:false
+        }
     ).addTo(map);
 
 
@@ -88,13 +106,29 @@ function initMap(){
 
     map.on("zoomend",()=>{
 
-        if(map.getZoom() >= 12){
-            if(!map.hasLayer(ignOACI)) ignOACI.addTo(map);
-        }else{
-            if(map.hasLayer(ignOACI)) map.removeLayer(ignOACI);
-        }
+        const zoom = map.getZoom();
 
+        // afficher OACI à partir zoom mission
+        if(zoom >= 12){
+            if(!map.hasLayer(ignOACI)){
+                ignOACI.addTo(map);
+            }
+        }else{
+            if(map.hasLayer(ignOACI)){
+                map.removeLayer(ignOACI);
+            }
+        }
     });
+
+
+    // =============================
+    // AUTO UPDATE OPENAIP
+    // =============================
+
+    if(typeof initOpenAIPAutoUpdate === "function"){
+        initOpenAIPAutoUpdate();
+    }
+
 }
 
 
@@ -102,11 +136,16 @@ function initMap(){
 
 function updateMapPosition(lat, lon){
 
-    if(!map) return;
+    if(!map || !lat || !lon) return;
 
-    map.flyTo([lat, lon], 11,{duration:0.6});
+    map.flyTo([lat, lon], 11, {
+        duration:0.6
+    });
 
-    if(positionMarker) map.removeLayer(positionMarker);
+    // marker position
+    if(positionMarker){
+        map.removeLayer(positionMarker);
+    }
 
     positionMarker = L.circle([lat, lon],{
         radius:500,
@@ -115,16 +154,29 @@ function updateMapPosition(lat, lon){
         fillOpacity:0.15
     }).addTo(map);
 
-    loadOpenAIPAirspaces?.(lat, lon);
-    updateRadar?.(lat, lon);
+    // recharge OpenAIP
+    if(typeof loadOpenAIPAirspaces === "function"){
+        loadOpenAIPAirspaces(lat, lon);
+    }
+
+    // radar pluie
+    if(typeof updateRadar === "function"){
+        updateRadar(lat, lon);
+    }
 }
 
 
-// ================= OPENAIP RENDER =================
+// ================= OPENAIP LAYER CONTROL =================
 
 function setOpenAIPLayer(layer){
+
+    if(!openAipLayer) return;
+
     openAipLayer.clearLayers();
-    openAipLayer.addLayer(layer);
+
+    if(layer){
+        openAipLayer.addLayer(layer);
+    }
 }
 
 

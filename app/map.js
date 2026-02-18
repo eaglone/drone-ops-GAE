@@ -1,7 +1,7 @@
 /**
  * MAP.JS — Drone OPS Tactical Map
- * VERSION PRO STABLE — MÉTÉO-FRANCE & DATA.GOUV INTEGRATION
- * FIX: Compatibilité Leaflet 1.4.0 (Windy) & Correction affichage Radar
+ * VERSION PRO — SÉCURISÉE & AUTOMATISÉE
+ * * Ce fichier gère l'affichage cartographique et l'injection du token Météo-France.
  */
 
 let map = null;
@@ -11,22 +11,30 @@ let oaciLayer = null;
 let rainRadarLayer = null;
 
 // =====================================================
-// 1. CONFIGURATION DU RADAR (SÉCURISÉ)
+// 1. GESTION DU RADAR PLUIE (MÉTÉO-FRANCE)
 // =====================================================
 
 async function initRainRadar() {
-    console.log("🛰️ Initialisation du flux Radar Météo-France...");
+    console.log("🛰️ Initialisation du Radar...");
 
-    // Nettoyage si une couche existe déjà
     if (rainRadarLayer && map) {
         map.removeLayer(rainRadarLayer);
     }
 
-    // Récupération du token depuis le localStorage (évite l'exposition GitHub)
-    const mfToken = localStorage.getItem('MF_TOKEN');
+    /**
+     * SÉCURITÉ : Injection du Token
+     * La balise ci-dessous est remplacée par GitHub Actions lors du déploiement.
+     */
+    const injectedToken = "__METEO_FRANCE_API_KEY__";
+    
+    // On vérifie si le token est injecté, sinon on check le localStorage (pour le dev local)
+    const mfToken = (injectedToken !== "__" + "METEO_FRANCE_API_KEY__" && injectedToken !== "") 
+                    ? injectedToken 
+                    : localStorage.getItem('MF_TOKEN');
 
     if (mfToken) {
-        // OPTION A : Flux WMS AROME-PI (Haute résolution via API)
+        // OPTION A : Flux AROME-PI Haute Résolution (Requiert Token)
+        console.log("✅ Token détecté : Chargement AROME-PI HD");
         const wmsUrl = "https://portail-api.meteofrance.fr/wms/MF-NWP-HIGHRES-AROMEPI-001-FRANCE-WMS/GetMap";
         
         rainRadarLayer = L.tileLayer.wms(wmsUrl, {
@@ -34,71 +42,62 @@ async function initRainRadar() {
             format: 'image/png',
             transparent: true,
             version: '1.3.0',
-            opacity: 0.6,
+            opacity: 0.65,
             token: mfToken,
             pane: "weatherPane",
             attribution: "© Météo-France AROME-PI"
         });
-        console.log("✅ Radar AROME-PI activé via Token");
     } else {
-        // OPTION B : URL Stable Data.gouv (Mosaïque France sans token)
-        console.warn("⚠️ Pas de token MF_TOKEN. Utilisation de l'URL stable Data.gouv.");
-        
+        // OPTION B : Image Stable Data.gouv (Sans Token)
+        console.warn("⚠️ Aucun token trouvé : Passage sur URL stable Data.gouv");
         const stableUrl = "https://www.data.gouv.fr/api/1/datasets/r/87668014-3d50-4074-9ba3-c4ef92882bd7";
-        
-        // Coordonnées de la mosaïque calées sur la France
-        const imageBounds = [[51.5, -5.8], [41.2, 9.8]]; 
+        const imageBounds = [[51.5, -5.8], [41.2, 9.8]]; // Calage France
         
         rainRadarLayer = L.imageOverlay(stableUrl, imageBounds, {
             opacity: 0.7,
             pane: "weatherPane",
             attribution: "© Météo-France / Data.gouv"
         });
-        console.log("✅ Radar stable (Data.gouv) activé");
     }
 
     return rainRadarLayer;
 }
 
-// Rafraîchissement automatique (Bypass du cache navigateur)
+// Rafraîchissement automatique toutes les 5 minutes
 setInterval(() => {
     if (rainRadarLayer && map && map.hasLayer(rainRadarLayer)) {
-        console.log("🔄 Refresh du radar pluie...");
-        const timestamp = Date.now();
+        console.log("🔄 Actualisation des données radar...");
         if (typeof rainRadarLayer.setUrl === 'function') {
-            // Pour l'image stable (ImageOverlay)
             const baseUrl = "https://www.data.gouv.fr/api/1/datasets/r/87668014-3d50-4074-9ba3-c4ef92882bd7";
-            rainRadarLayer.setUrl(`${baseUrl}?t=${timestamp}`);
+            rainRadarLayer.setUrl(`${baseUrl}?t=${Date.now()}`);
         } else if (typeof rainRadarLayer.redraw === 'function') {
-            // Pour le flux WMS
             rainRadarLayer.redraw();
         }
     }
-}, 300000); // 5 minutes
+}, 300000);
 
 // =====================================================
 // 2. INITIALISATION DE LA CARTE
 // =====================================================
 
 async function initMap() {
+    // Sécurité contre la double initialisation
     if (!document.getElementById("map") || map) return;
 
     console.log("🗺️ Chargement du Dashboard Tactique...");
 
-    // Initialisation forcée compatible Leaflet 1.4.0
+    // Config compatible Leaflet 1.4.0 (Windy)
     map = L.map("map", {
         zoomControl: true,
-        preferCanvas: false // Plus stable pour les vieux Leaflet
+        preferCanvas: false,
+        zoomAnimation: false 
     }).setView([46.6, 2.2], 6);
 
     window.map = map;
 
-    // Gestion de l'ordre d'affichage (Panes)
-    if (map.createPane) {
-        map.createPane("zonesPane").style.zIndex = 650;
-        map.createPane("weatherPane").style.zIndex = 675;
-        map.createPane("airspacePane").style.zIndex = 700;
-    }
+    // Création des Panes (Z-Index)
+    map.createPane("weatherPane").style.zIndex = 675;
+    map.createPane("airspacePane").style.zIndex = 700;
 
     // --- COUCHES DE BASE ---
     osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -112,25 +111,18 @@ async function initMap() {
     }).addTo(map);
 
     // --- COUCHES OPÉRATIONNELLES ---
-    const dgacIgnLayer = L.tileLayer("https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=TRANSPORTS.DRONES.RESTRICTIONS&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/png&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}", {
-        opacity: 0.75,
-        attribution: "© IGN — Restrictions drones"
-    });
-
-    // Initialisation OpenAIP
     window.openAipLayer = L.layerGroup([], { pane: "airspacePane" }).addTo(map);
 
-    // --- INITIALISATION DU RADAR ---
+    // --- RADAR ---
     const radar = await initRainRadar();
     if (radar) radar.addTo(map);
 
-    // --- CONTRÔLE DES COUCHES ---
+    // --- CONTRÔLEUR DE COUCHES ---
     const baseMaps = { "Fond OSM": osmLayer };
     const overlays = {
         "Carte OACI IGN": oaciLayer,
-        "Restrictions drones IGN": dgacIgnLayer,
-        "Espaces aériens OpenAIP": window.openAipLayer,
-        "Radar Pluie (Météo-France)": radar
+        "Espaces aériens": window.openAipLayer,
+        "Radar Pluie": radar
     };
 
     L.control.layers(baseMaps, overlays, { collapsed: false }).addTo(map);
@@ -145,7 +137,7 @@ async function initMap() {
 function updateMapPosition(lat, lon) {
     if (!map || !lat || !lon) return;
 
-    map.flyTo([lat, lon], 11);
+    map.setView([lat, lon], 11);
 
     if (positionMarker) map.removeLayer(positionMarker);
 
@@ -161,6 +153,6 @@ function updateMapPosition(lat, lon) {
     }
 }
 
-// Exports globaux
+// Exports globaux pour main.js
 window.initMap = initMap;
 window.updateMapPosition = updateMapPosition;

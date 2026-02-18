@@ -78,13 +78,28 @@ function bindZonePopup(feature,layer){
 
 // ================= RADAR =================
 
+let radarLastUpdate = 0;
+
 function updateRadar(lat, lon){
 
     const radar = document.getElementById("radarFrame");
     if(!radar) return;
 
+    // évite reload toutes les secondes
+    const now = Date.now();
+    if(now - radarLastUpdate < 120000) return; // 2 min
+
+    radarLastUpdate = now;
+
     radar.src =
-        `https://www.rainviewer.com/map.html?loc=${lat},${lon},11&control=1&map=1&refl=1&n=1&p=3&v=dark`;
+        `https://www.rainviewer.com/map.html?loc=${lat},${lon},11` +
+        `&control=1` +
+        `&map=1` +
+        `&refl=1` +
+        `&n=1` +
+        `&p=3` +
+        `&v=dark` +
+        `&smooth=1`;
 }
 
 

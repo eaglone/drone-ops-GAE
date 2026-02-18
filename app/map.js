@@ -20,10 +20,13 @@ function initMap(){
 
     console.log("🗺️ Initialisation carte");
 
-    map = L.map("map").setView(
-        [window.latitude, window.longitude],
-        10
-    );
+    map = L.map("map").setView([window.latitude, window.longitude], 10);
+
+// IMPORTANT — créer pane AVANT tout
+if (!map.getPane("zonesPane")) {
+    map.createPane("zonesPane");
+    map.getPane("zonesPane").style.zIndex = 650;
+}
 
     window.map = map;
 

@@ -1,16 +1,14 @@
 /**
- * DGACZONES.JS — Gestion des restrictions UAS (Geoportail / DGAC)
- * Permet l'affichage des zones de restriction pour drones
+ * DGACZONES.JS — Affichage restrictions drones via WMS GeoPlateforme
+ * Source IGN / DGAC (live)
  */
 
 let dgacLayer = null;
 
 /**
- * Charge les données GeoJSON et prépare la couche Leaflet
- * @returns {Promise<L.GeoJSON>} La couche prête à être ajoutée au contrôle de couches
+ * Charge la couche DGAC depuis le WMS GeoPlateforme
  */
 async function loadDGACZones() {
-    // Si la couche est déjà initialisée, on la retourne simplement
     if (dgacLayer) return dgacLayer;
 
     if (!window.map) {
@@ -19,57 +17,51 @@ async function loadDGACZones() {
     }
 
     try {
-        console.log("🛰️ Chargement des zones DGAC...");
+        console.log("🛰️ Chargement WMS DGAC...");
 
-        // Utilise la fonction cachedFetch définie dans cache.js
-        // Assurez-vous que le fichier zones_drones.geojson est à la racine
-        const geojson = await cachedFetch(
-            "dgac_zones",
-            "zones_drones.geojson"
+        dgacLayer = L.tileLayer.wms(
+            "https://data.geopf.fr/wms-r",
+            {
+                layers: "TRANSPORTS.DRONES.RESTRICTIONS",
+                format: "image/png",
+                transparent: true,
+                version: "1.3.0",
+                attribution: "DGAC / IGN Géoplateforme",
+                pane: "zonesPane",
+                opacity: 0.7
+            }
         );
 
-        dgacLayer = L.geoJSON(geojson, {
-            // Utilise le pane défini dans map.js pour passer au-dessus du fond de carte
-            pane: "zonesPane",
-            
-            style: function(feature) {
-                // Logique de couleur basée sur la propriété 'limite_alti' (standard DGAC)
-                // 0 = Interdit (Rouge), > 0 = Limité (Orange)
-                const altitudeMax = feature.properties.limite_alti;
-                
-                return {
-                    color: altitudeMax === 0 ? "#ff0000" : "#ff9800",
-                    fillColor: altitudeMax === 0 ? "#ff0000" : "#ff9800",
-                    weight: 2,
-                    opacity: 0.8,
-                    fillOpacity: 0.3
-                };
-            },
-            
-            onEachFeature: function(feature, layer) {
-                const props = feature.properties;
-                const popupContent = `
-                    <div style="font-family: 'Inter', sans-serif; padding: 5px;">
-                        <strong style="color: #ef4444; display: block; border-bottom: 1px solid #eee; margin-bottom: 5px;">
-                            RESTRICTION UAS
-                        </strong>
-                        <b>Zone :</b> ${props.nom || "Non répertoriée"}<br>
-                        <b>Hauteur Max :</b> ${props.limite_alti}m AGL<br>
-                        <small style="color: #666;">Source : DGAC / Géoplateforme</small>
-                    </div>
-                `;
-                layer.bindPopup(popupContent);
-            }
-        });
-
-        console.log("✅ Couche DGAC créée avec succès");
+        console.log("✅ Couche DGAC WMS prête");
         return dgacLayer;
 
     } catch (error) {
-        console.error("❌ Erreur lors du chargement des zones DGAC :", error);
+        console.error("❌ Erreur WMS DGAC :", error);
         return null;
     }
 }
 
-// Rend la fonction accessible globalement
+/**
+ * Ajoute la couche au contrôle checkbox
+ */
+async function addDGACToLayerControl() {
+    const layer = await loadDGACZones();
+    if (!layer) return;
+
+    if (!window.overlayMaps) window.overlayMaps = {};
+
+    window.overlayMaps["Zones DGAC (UAS)"] = layer;
+
+    if (!window.layerControl) {
+        window.layerControl = L.control.layers(
+            window.baseMaps || {},
+            window.overlayMaps,
+            { collapsed: false }
+        ).addTo(window.map);
+    } else {
+        window.layerControl.addOverlay(layer, "Zones DGAC (UAS)");
+    }
+}
+
 window.loadDGACZones = loadDGACZones;
+window.addDGACToLayerControl = addDGACToLayerControl;

@@ -1,7 +1,8 @@
 /**
  * MAP.JS — Drone OPS Tactical Map
- * OSM + IGN OACI + OpenAIP
- * Version production GitHub Pages stable
+ * PRODUCTION STABLE
+ * OSM + IGN OACI + OpenAIP Tiles
+ * GitHub Pages safe
  */
 
 let map = null;
@@ -17,16 +18,19 @@ function initMap(){
 
     if(!document.getElementById("map")) return;
 
-    console.log("🗺️ Initialisation carte");
-
-    // sécurité double init
+    // évite double init
     if(map) return;
 
-    map = L.map("map",{
-        zoomControl:true
-    }).setView([window.latitude, window.longitude],10);
+    console.log("🗺️ Initialisation carte");
 
-    // rendre accessible globalement
+    map = L.map("map",{
+        zoomControl:true,
+        preferCanvas:true // stabilité Leaflet
+    }).setView([
+        window.latitude || 48.783057,
+        window.longitude || 2.213649
+    ],10);
+
     window.map = map;
 
 
@@ -38,7 +42,7 @@ function initMap(){
     }
 
 
-    // ================= OSM (fond sécurité)
+    // ================= FOND OSM (toujours safe)
 
     osmLayer = L.tileLayer(
         "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -51,46 +55,56 @@ function initMap(){
 
     // ================= IGN OACI (overlay aviation)
 
-    oaciLayer = L.tileLayer(
-        "https://data.geopf.fr/private/tms/1.0.0/" +
-        "GEOGRAPHICALGRIDSYSTEMS.MAPS.SCAN-OACI/{z}/{x}/{y}.jpeg" +
-        "?apikey=8Y5CE2vg2zJMePOhqeHYhXx4fmI3uzpz",
-        {
-            opacity:0.7,
-            maxZoom:16,
-            attribution:"© IGN OACI"
-        }
-    ).addTo(map);
+    try{
+        oaciLayer = L.tileLayer(
+            "https://data.geopf.fr/private/tms/1.0.0/" +
+            "GEOGRAPHICALGRIDSYSTEMS.MAPS.SCAN-OACI/{z}/{x}/{y}.jpeg" +
+            "?apikey=8Y5CE2vg2zJMePOhqeHYhXx4fmI3uzpz",
+            {
+                opacity:0.7,
+                maxZoom:16,
+                attribution:"© IGN OACI"
+            }
+        ).addTo(map);
+    }
+    catch(e){
+        console.warn("OACI non disponible");
+    }
 
 
-    // ================= OPENAIP GLOBAL LAYER (IMPORTANT)
+    // ================= OPENAIP LAYER GLOBAL (OBLIGATOIRE)
 
-    // 👉 toujours global sinon openaip.js plante
     window.openAipLayer = L.layerGroup().addTo(map);
 
 
     // ================= CONTROLE COUCHES
 
-    L.control.layers(
-        {
-            "Fond OSM": osmLayer
-        },
-        {
-            "Carte OACI IGN": oaciLayer,
-            "Espaces aériens OpenAIP": window.openAipLayer
-        },
-        { collapsed:false }
-    ).addTo(map);
+    const baseMaps = {
+        "Fond OSM": osmLayer
+    };
+
+    const overlays = {
+        "Carte OACI IGN": oaciLayer,
+        "Espaces aériens OpenAIP": window.openAipLayer
+    };
+
+    L.control.layers(baseMaps, overlays, {
+        collapsed:false
+    }).addTo(map);
 
 
-    // ================= AUTO UPDATE OPENAIP
+    // ================= AUTO INIT OPENAIP
 
-    if(typeof initOpenAIPAutoUpdate === "function"){
-        initOpenAIPAutoUpdate();
-    }
+    setTimeout(()=>{
+        if(typeof initOpenAIPAutoUpdate === "function"){
+            initOpenAIPAutoUpdate();
+        }
+    },500);
+
 
     console.log("✅ MAP READY");
 }
+
 
 
 // ================= UPDATE POSITION =================
@@ -112,14 +126,15 @@ function updateMapPosition(lat,lon){
         fillOpacity:0.15
     }).addTo(map);
 
-    // refresh airspaces
+    // refresh OpenAIP tiles
     if(typeof loadOpenAIPAirspaces === "function"){
         loadOpenAIPAirspaces(lat,lon);
     }
 }
 
 
-// ================= OPENAIP LAYER CONTROL (compat ancien code)
+
+// ================= OPENAIP LAYER CONTROL (legacy support)
 
 function setOpenAIPLayer(layer){
 
@@ -128,10 +143,12 @@ function setOpenAIPLayer(layer){
     try{
         window.openAipLayer.clearLayers();
         if(layer) window.openAipLayer.addLayer(layer);
-    }catch(e){
+    }
+    catch(e){
         console.warn("OpenAIP layer error", e);
     }
 }
+
 
 
 // ================= EXPORT GLOBAL

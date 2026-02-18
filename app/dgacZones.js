@@ -10,31 +10,42 @@
 let dgacLayer = null;
 let hoveredLayer = null;
 
+// ================= STYLE opacity =================
+
+function getDGACOpacity(){
+
+    if(!window.map) return 0.4;
+
+    const z = window.map.getZoom();
+
+    // tu peux ajuster les valeurs
+    if(z <= 8) return 0.55;   // vue large → visible
+    if(z <= 10) return 0.45;
+    if(z <= 12) return 0.35;
+    if(z <= 14) return 0.25;
+    if(z <= 16) return 0.18;
+    return 0.12; // très zoomé → discret
+}
+
 
 // ================= STYLE DYNAMIQUE =================
 
 function dgacStyle(feature){
 
-    const zoom = window.map?.getZoom?.() || 10;
+    const z = window.map?.getZoom() || 10;
 
-    const baseOpacity = zoom < 9 ? 0.1 :
-                        zoom < 11 ? 0.2 :
-                        zoom < 13 ? 0.3 :
-                        0.45;
+    const isClose = z > 14;
 
     return {
-        color: feature.properties.restriction === "PROHIBITED"
-            ? "#ff0000"
-            : "#ff9800",
-
-        fillColor: feature.properties.restriction === "PROHIBITED"
-            ? "#ff0000"
-            : "#ff9800",
-
-        weight: zoom >= 13 ? 2 : 1,
-        fillOpacity: baseOpacity
+        color: "#ff0000",
+        weight: isClose ? 3 : 2,
+        fillColor: "#ff0000",
+        fillOpacity: isClose ? 0.08 : getDGACOpacity(),
+        opacity: 0.9
     };
 }
+
+
 
 
 // ================= INTERACTION =================
@@ -105,6 +116,8 @@ function convertUASZonesToGeoJSON(data){
 
 // ================= LOAD =================
 
+// ================= LOAD =================
+
 async function loadDGACZones(){
 
     if(dgacLayer) return dgacLayer;
@@ -114,7 +127,6 @@ async function loadDGACZones(){
 
     try{
 
-        // ⚠️ ton JSON doit être à la racine GitHub Pages
         const res = await fetch("app/UASZones.json");
 
         if(!res.ok) throw new Error("JSON non trouvé");
@@ -130,10 +142,8 @@ async function loadDGACZones(){
             onEachFeature:onEachDGACFeature
         });
 
-        // refresh style quand zoom change
-        window.map.on("zoomend", ()=>{
-            dgacLayer.setStyle(dgacStyle);
-        });
+        // ⭐ update style quand zoom change (une seule fois)
+        window.map.on("zoomend", updateDGACStyle);
 
         return dgacLayer;
 
@@ -144,3 +154,4 @@ async function loadDGACZones(){
 }
 
 window.loadDGACZones = loadDGACZones;
+

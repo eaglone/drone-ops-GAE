@@ -136,39 +136,35 @@ async function loadDGACZones() {
         return null;
     }
 
-    console.log("🛰️ Initialisation DGAC optimisé...");
+   console.log("🛰️ Initialisation DGAC optimisé...");
 
-    // couche vide
-    dgacLayer = L.geoJSON(null, {
-        pane: "zonesPane",
-        style: dgacStyle,
-        onEachFeature: onEachDGACFeature
-    });
+dgacLayer = L.geoJSON(null, {
+    pane: "zonesPane",
+    style: dgacStyle,
+    onEachFeature: onEachDGACFeature
+});
 
-    // 1️⃣ CACHE FIRST
-    const cached = await loadDGAC();
+// CACHE FIRST
+const cached = await window.loadDGAC?.();
 
-    if (cached) {
-        console.log("⚡ DGAC depuis cache");
-        dgacLayer.addData(cached);
-        return dgacLayer;
-    }
-
-    // 2️⃣ WORKER
-    const worker = new Worker("./dgacWorker.js");
-
-    worker.onmessage = e => {
-        dgacLayer.addData(e.data);
-        saveDGAC(e.data);
-    };
-
-    // 3️⃣ STREAMING WFS
-    await fetchAllDGACFeaturesProgressive(batch => {
-        worker.postMessage(batch);
-    });
-
+if (cached) {
+    console.log("⚡ DGAC depuis cache");
+    dgacLayer.addData(cached);
     return dgacLayer;
 }
+
+// WORKER
+const worker = new Worker("app/dgacWorkers.js");
+
+worker.onmessage = e => {
+    dgacLayer.addData(e.data);
+    window.saveDGAC?.(e.data);
+};
+
+// STREAM WFS
+await fetchAllDGACFeaturesProgressive(batch => {
+    worker.postMessage(batch);
+});
 
 
 /**

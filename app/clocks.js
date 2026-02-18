@@ -31,23 +31,15 @@ function initClocks(){
 // ================= UPDATE =================
 
 function updateClocks(){
-
     const now = new Date();
+    // Correction des sélecteurs pour correspondre à l'index.html
+    const localEl = document.getElementById("clockLocal"); 
+    const utcEl   = document.getElementById("clockUTC");
 
-    const local = now.toLocaleTimeString("fr-FR", {
-        hour12:false
-    });
-
-    const utc =
-        now.getUTCHours().toString().padStart(2,"0") + ":" +
-        now.getUTCMinutes().toString().padStart(2,"0") + ":" +
-        now.getUTCSeconds().toString().padStart(2,"0") + "Z";
-
-    const localEl = document.getElementById("localTime");
-    const utcEl   = document.getElementById("utcTime");
-
-    if(localEl) localEl.textContent = local;
-    if(utcEl)   utcEl.textContent   = utc;
+    if(localEl) localEl.textContent = now.toLocaleTimeString("fr-FR", {hour12:false});
+    if(utcEl)   utcEl.textContent = now.getUTCHours().toString().padStart(2,"0") + ":" + 
+                                    now.getUTCMinutes().toString().padStart(2,"0") + ":" + 
+                                    now.getUTCSeconds().toString().padStart(2,"0") + "Z";
 }
 
 

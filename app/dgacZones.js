@@ -1,44 +1,73 @@
 /**
- * DGAC LOCAL JSON → Leaflet
- * - fonctionne GitHub Pages
- * - pas d'API
- * - pas de clé IGN
+ * DGAC LOCAL JSON → Leaflet (ROBUST VERSION)
  */
 
 let dgacLayer = null;
 
-// ================= CONVERSION UAS → GEOJSON =================
+
+// ================= CONVERSION SAFE =================
 
 function convertUASZonesToGeoJSON(data){
 
+    if(!data) throw new Error("UAS JSON vide");
+
     const features = [];
+
+    // support FeatureCollection direct
+    if(data.type === "FeatureCollection"){
+        return data;
+    }
+
+    // support format SIA
+    if(!Array.isArray(data.features)){
+        throw new Error("Structure JSON inconnue");
+    }
 
     data.features.forEach(zone => {
 
-        zone.geometry?.forEach(g => {
+        if(!zone.geometry) return;
 
-            const geom = g.horizontalProjection;
-            if(!geom) return;
+        // format array
+        if(Array.isArray(zone.geometry)){
+            zone.geometry.forEach(g => {
+                if(g?.horizontalProjection){
+                    features.push({
+                        type:"Feature",
+                        properties:{
+                            name: zone.name || "Zone DGAC",
+                            restriction: zone.restriction || "UNKNOWN",
+                            lower:g.lowerLimit || 0,
+                            upper:g.upperLimit || 0,
+                            message:zone.message || ""
+                        },
+                        geometry:g.horizontalProjection
+                    });
+                }
+            });
+        }
 
+        // format direct
+        else if(zone.geometry.type){
             features.push({
                 type:"Feature",
-                properties:{
-                    name: zone.name,
-                    restriction: zone.restriction,
-                    lower:g.lowerLimit,
-                    upper:g.upperLimit,
-                    message:zone.message
-                },
-                geometry:geom
+                properties: zone.properties || {},
+                geometry: zone.geometry
             });
-        });
+        }
     });
+
+    console.log("DGAC features:", features.length);
+
+    if(features.length === 0){
+        throw new Error("Aucune géométrie DGAC trouvée");
+    }
 
     return {
         type:"FeatureCollection",
         features
     };
 }
+
 
 // ================= STYLE =================
 
@@ -52,22 +81,6 @@ function dgacStyle(feature){
     };
 }
 
-// ================= CLICK =================
-
-function onEachDGACFeature(feature, layer){
-
-    layer.on("click", e=>{
-        L.popup()
-            .setLatLng(e.latlng)
-            .setContent(`
-<b>ZONE DGAC</b><hr>
-<b>Nom :</b> ${feature.properties.name}<br>
-<b>Restriction :</b> ${feature.properties.restriction}<br>
-<b>Altitude :</b> ${feature.properties.lower} → ${feature.properties.upper} m
-`)
-            .openOn(window.map);
-    });
-}
 
 // ================= LOAD =================
 
@@ -78,13 +91,11 @@ async function loadDGACZones(){
 
     console.log("📡 Chargement DGAC local JSON");
 
-    try {
+    try{
 
         const res = await fetch("./app/UASZones.json");
 
-        if(!res.ok){
-            throw new Error("DGAC JSON introuvable: " + res.status);
-        }
+        if(!res.ok) throw new Error("JSON non trouvé");
 
         const data = await res.json();
 
@@ -92,16 +103,17 @@ async function loadDGACZones(){
 
         dgacLayer = L.geoJSON(geojson,{
             pane:"zonesPane",
-            style:dgacStyle,
-            onEachFeature:onEachDGACFeature
+            style:dgacStyle
         });
 
         console.log("✅ DGAC chargé");
 
         return dgacLayer;
 
-    } catch(err){
+    }catch(err){
         console.error("❌ DGAC erreur:", err);
         return null;
     }
 }
+
+window.loadDGACZones = loadDGACZones;

@@ -7,60 +7,67 @@ let dgacLayer = null;
 
 // ================= CONVERSION SAFE =================
 
+function isValidGeometry(geom){
+
+    if(!geom) return false;
+    if(!geom.type) return false;
+    if(!geom.coordinates) return false;
+
+    // vérifie structure minimale
+    if(
+        geom.type === "Polygon" &&
+        (!Array.isArray(geom.coordinates) || geom.coordinates.length === 0)
+    ) return false;
+
+    if(
+        geom.type === "MultiPolygon" &&
+        (!Array.isArray(geom.coordinates) || geom.coordinates.length === 0)
+    ) return false;
+
+    return true;
+}
+
+
 function convertUASZonesToGeoJSON(data){
 
-    if(!data) throw new Error("UAS JSON vide");
-
     const features = [];
+    let skipped = 0;
 
-    // support FeatureCollection direct
-    if(data.type === "FeatureCollection"){
-        return data;
-    }
-
-    // support format SIA
-    if(!Array.isArray(data.features)){
-        throw new Error("Structure JSON inconnue");
-    }
+    if(!data?.features) throw new Error("Structure JSON invalide");
 
     data.features.forEach(zone => {
 
         if(!zone.geometry) return;
 
-        // format array
         if(Array.isArray(zone.geometry)){
-            zone.geometry.forEach(g => {
-                if(g?.horizontalProjection){
-                    features.push({
-                        type:"Feature",
-                        properties:{
-                            name: zone.name || "Zone DGAC",
-                            restriction: zone.restriction || "UNKNOWN",
-                            lower:g.lowerLimit || 0,
-                            upper:g.upperLimit || 0,
-                            message:zone.message || ""
-                        },
-                        geometry:g.horizontalProjection
-                    });
-                }
-            });
-        }
 
-        // format direct
-        else if(zone.geometry.type){
-            features.push({
-                type:"Feature",
-                properties: zone.properties || {},
-                geometry: zone.geometry
+            zone.geometry.forEach(g => {
+
+                const geom = g?.horizontalProjection;
+                if(!isValidGeometry(geom)){
+                    skipped++;
+                    return;
+                }
+
+                features.push({
+                    type:"Feature",
+                    properties:{
+                        name: zone.name || "Zone DGAC",
+                        restriction: zone.restriction || "UNKNOWN",
+                        lower:g.lowerLimit || 0,
+                        upper:g.upperLimit || 0
+                    },
+                    geometry:geom
+                });
             });
         }
     });
 
-    console.log("DGAC features:", features.length);
+    console.log("DGAC features valid:", features.length);
+    console.log("DGAC features skipped:", skipped);
 
-    if(features.length === 0){
-        throw new Error("Aucune géométrie DGAC trouvée");
-    }
+    if(features.length === 0)
+        throw new Error("Aucune géométrie valide");
 
     return {
         type:"FeatureCollection",

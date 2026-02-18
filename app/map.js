@@ -49,21 +49,20 @@ function initMapSafe(){
     // IGN PLAN (URL CORRECTE LEAFLET)
     // =============================
 
-    ignPlan = L.tileLayer(
-        "https://data.geopf.fr/wmts?" +
-        "SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0" +
-        "&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLAN.IGN" +
-        "&STYLE=normal" +
-        "&TILEMATRIXSET=PM" +
-        "&FORMAT=image/png" +
-        "&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}" +
-        "&apikey=8Y5CE2vg2zJMePOhqeHYhXx4fmI3uzpz",
-        {
-            maxZoom:18,
-            attribution:"© IGN GeoPF",
-            crossOrigin:true
-        }
-    ).addTo(map);
+   ignPlan = L.tileLayer(
+"https://data.geopf.fr/wmts?" +
+"SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0" +
+"&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLAN.IGN" +
+"&STYLE=normal" +
+"&TILEMATRIXSET=PM" +
+"&FORMAT=image/png" +
+"&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}" +
+"&apikey=8Y5CE2vg2zJMePOhqeHYhXx4fmI3uzpz",
+{
+    tileSize:256,
+    maxZoom:18,
+    attribution:"© IGN"
+});
 
 
     // =============================

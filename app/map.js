@@ -26,53 +26,41 @@ let radarTimer = null;
 // =====================================================
 // RADAR PLUIE ANIMÉ PRO
 // =====================================================
-
-// Dans map.js
-
+// Remplace ton ancienne fonction initRainRadar
 async function initRainRadar() {
-    console.log("🌧️ Init New Radar via WMS");
+    console.log("🛰️ Utilisation du Radar Officiel Météo-France (Data.gouv)");
 
-    // On crée une couche WMS (plus stable que l'animation de Rainviewer)
-    rainRadarLayer = L.tileLayer.wms("https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0q.cgi", {
-        layers: 'nexrad-n0q-900913',
-        format: 'image/png',
-        transparent: true,
-        opacity: 0.5,
+    // URL stable issue de ta capture d'écran
+    const radarImageUrl = "https://www.data.gouv.fr/api/1/datasets/r/87668014-3d50-4074-9ba3-c4ef92882bd7";
+
+    // Définition des bornes géographiques de la mosaïque France
+    // (A ajuster selon le fichier de métadonnées du package)
+    const imageBounds = [[51.5, -5.5], [41.0, 10.0]]; 
+
+    if (rainRadarLayer) {
+        map.removeLayer(rainRadarLayer);
+    }
+
+    // On utilise ImageOverlay car Météo-France fournit souvent des images entières (mosaïques)
+    rainRadarLayer = L.imageOverlay(radarImageUrl, imageBounds, {
+        opacity: 0.6,
         pane: "weatherPane",
-        attribution: "NEXRAD via Iowa State Univ"
+        interactive: false,
+        attribution: "© Météo-France via Data.gouv"
     });
 
-    // NOTE : Pour la France spécifiquement, si tu veux éviter Rainviewer, 
-    // l'alternative visuelle la plus fiable est souvent de rester sur Rainviewer 
-    // MAIS d'utiliser Open-Meteo pour les données de la colonne de droite.
-    
     return rainRadarLayer;
 }
-function startRadarAnimation(){
 
-    if(radarTimer) clearInterval(radarTimer);
-
-    radarTimer = setInterval(()=>{
-
-        if(!radarFrames.length || !rainRadarLayer) return;
-
-        radarIndex = (radarIndex + 1) % radarFrames.length;
-
-        // transition plus douce
-        rainRadarLayer.setOpacity(0.0);
-
-        setTimeout(()=>{
-            rainRadarLayer.setUrl(
-                buildRadarURL(radarFrames[radarIndex].path)
-            );
-            rainRadarLayer.setOpacity(0.7);
-        }, 150);
-
-    }, 1500); // 1.5 sec = fluide pro
-}
-
-
-
+// Pour l'animation, Météo-France étant une image fixe mise à jour,
+// on se contente de recharger l'image toutes les 5 min avec un timestamp pour éviter le cache.
+setInterval(() => {
+    if (rainRadarLayer) {
+        const newUrl = "https://www.data.gouv.fr/api/1/datasets/r/87668014-3d50-4074-9ba3-c4ef92882bd7?t=" + Date.now();
+        rainRadarLayer.setUrl(newUrl);
+        console.log("🔄 Radar Météo-France actualisé");
+    }
+}, 300000); // 5 minutes
 // =====================================================
 // INIT MAP
 // =====================================================

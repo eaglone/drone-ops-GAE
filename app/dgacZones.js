@@ -9,6 +9,11 @@
 
 let dgacLayer = null;
 let hoveredLayer = null;
+function updateDGACStyle(){
+    console.log("DGAC STYLE UPDATE", window.map.getZoom());
+    if(!dgacLayer) return;
+    dgacLayer.setStyle(dgacStyle);
+}
 
 // ================= STYLE opacity =================
 

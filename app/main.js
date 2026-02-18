@@ -60,11 +60,14 @@ function initPosition(){
 // ================================
 
 function initModules(){
-
     safeCall("initClocks");
     safeCall("initAutocomplete");
     safeCall("initMeteo");
     safeCall("generateSoraChecklist");
+    
+    // Ajout des nouveaux modules
+    safeCall("loadDGACZones");
+    safeCall("loadNotam");
 }
 
 

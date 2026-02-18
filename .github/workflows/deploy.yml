@@ -2,7 +2,7 @@ name: Deploy Drone OPS
 
 on:
   push:
-    branches: ["main"] # Se déclenche quand tu push sur main
+    branches: ["main"]
 
 permissions:
   contents: read
@@ -11,6 +11,12 @@ permissions:
 
 jobs:
   deploy:
+    # --- AJOUTER CES DEUX LIGNES ICI ---
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    # -----------------------------------
+    
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -18,7 +24,7 @@ jobs:
 
       - name: Inject API Key
         run: |
-          # Remplace la balise par ton secret METEO_FRANCE_API_KEY dans le bon fichier
+          # Injection de ton secret dans ton fichier JS
           sed -i "s/__METEO_FRANCE_API_KEY__/${{ secrets.METEO_FRANCE_API_KEY }}/g" app/map.js
 
       - name: Setup Pages
@@ -27,7 +33,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: '.' # Déploie tout le projet
+          path: '.'
 
       - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4

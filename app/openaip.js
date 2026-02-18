@@ -1,61 +1,61 @@
 /**
- * OPENAIP.JS — Airspaces Aviation Overlay
- * OpenAIP Core API
+ * OPENAIP.JS — Aviation Airspaces Overlay
+ * Version production OPS / ICAO
  */
 
 const OPENAIP_KEY = "db8fd47e611ac318fc7716c10311d4f2";
 
-let openAipLayer;
+let openAipLayer = null;
+let lastFetchPosition = null;
 
 
 // =============================
-// LOAD AIRSPACES
+// LOAD AIRSPACES (AUTO POSITION)
 // =============================
 
 async function loadOpenAIPAirspaces(lat, lon){
 
-    if(!map) return;
+    if(!map || !lat || !lon) return;
 
-    // ===== CACHE 10 MIN =====
-    const cacheKey = "openaip_cache";
-    const cacheTime = localStorage.getItem("openaip_cache_time");
+    // éviter reload si déplacement faible
+    if(lastFetchPosition){
 
-    if(cacheTime && Date.now() - cacheTime < 600000){
+        const d = distanceKm(
+            lat, lon,
+            lastFetchPosition.lat,
+            lastFetchPosition.lon
+        );
 
-        const cached = localStorage.getItem(cacheKey);
-        if(cached){
-            renderAirspaces(JSON.parse(cached));
-            return;
-        }
+        if(d < 5) return; // refresh seulement si >5km
     }
+
+    lastFetchPosition = {lat, lon};
 
     try{
 
-        // bounding box 80km autour position
-        const bbox = getBBox(lat, lon, 0.8);
+        const bbox = buildBBoxKm(lat, lon, 80); // 80km rayon
 
         const url =
-        `https://api.core.openaip.net/api/airspaces?` +
-        `bbox=${bbox}` +
-        `&limit=200`;
+            `https://api.core.openaip.net/api/airspaces` +
+            `?bbox=${bbox}&limit=500`;
 
         const res = await fetch(url,{
-            headers:{
-                "x-openaip-api-key": OPENAIP_KEY
-            }
+            headers:{ "x-openaip-api-key": OPENAIP_KEY }
         });
+
+        if(!res.ok){
+            console.warn("OpenAIP API error:", res.status);
+            return;
+        }
 
         const data = await res.json();
 
-        if(!data?.items) return;
-
-        localStorage.setItem(cacheKey, JSON.stringify(data.items));
-        localStorage.setItem("openaip_cache_time", Date.now());
+        if(!data?.items?.length) return;
 
         renderAirspaces(data.items);
 
     }catch(e){
-        console.error("OpenAIP error", e);
+        console.error("OpenAIP error:", e);
     }
 }
 
@@ -70,44 +70,54 @@ function renderAirspaces(items){
         map.removeLayer(openAipLayer);
     }
 
-    const geojson={
-        type:"FeatureCollection",
-        features:[]
-    };
+    const features = [];
 
     items.forEach(a=>{
 
-        if(!a.geometry) return;
+        if(!a.geometry?.coordinates) return;
 
-        geojson.features.push({
+        features.push({
             type:"Feature",
             geometry:a.geometry,
             properties:{
                 name:a.name,
-                type:a.type,
                 class:a.airspaceClass,
-                lower:a.lowerLimit?.value,
-                upper:a.upperLimit?.value
+                type:a.type,
+                lower:a.lowerLimit?.value || "",
+                upper:a.upperLimit?.value || ""
             }
         });
-
     });
 
-    openAipLayer = L.geoJSON(geojson,{
+    openAipLayer = L.geoJSON({
+        type:"FeatureCollection",
+        features
+    },{
         pane:"zonesPane",
         style:getAirspaceStyle,
         onEachFeature:bindAirspacePopup
     }).addTo(map);
+
+    // transparence dynamique selon zoom
+    map.on("zoomend",()=>{
+        openAipLayer.setStyle(getAirspaceStyle);
+    });
 }
 
 
 // =============================
-// STYLE ICAO
+// STYLE ICAO PROFESSIONNEL
 // =============================
 
 function getAirspaceStyle(feature){
 
+    const zoom = map.getZoom();
     const c = feature.properties.class;
+
+    let opacity = 0.03;
+    if(zoom>9) opacity=0.06;
+    if(zoom>11) opacity=0.12;
+    if(zoom>13) opacity=0.25;
 
     return{
         color:
@@ -115,16 +125,18 @@ function getAirspaceStyle(feature){
             c==="TMA" ? "#f59e0b" :
             c==="D"   ? "#ef4444" :
             c==="R"   ? "#f97316" :
-            "#38bdf8",
+            c==="P"   ? "#dc2626" :
+            c==="C"   ? "#38bdf8" :
+            "#64748b",
 
-        weight:2,
-        fillOpacity:0.08
+        weight: zoom>12 ? 2 : 1,
+        fillOpacity: opacity
     };
 }
 
 
 // =============================
-// POPUP
+// POPUP STYLE OACI
 // =============================
 
 function bindAirspacePopup(feature, layer){
@@ -134,7 +146,7 @@ function bindAirspacePopup(feature, layer){
     layer.bindPopup(`
         <div class="oaci-popup">
             <div class="oaci-title">${p.name || "Airspace"}</div>
-            <div>${p.class || ""}</div>
+            <div class="oaci-status">${p.class || ""}</div>
             <div>⬆ ${p.upper || "?"}</div>
             <div>⬇ ${p.lower || "?"}</div>
         </div>
@@ -143,23 +155,63 @@ function bindAirspacePopup(feature, layer){
 
 
 // =============================
-// BBOX AUTOUR POSITION
+// BBOX KM AUTOUR POSITION
 // =============================
 
-function getBBox(lat, lon, radius){
+function buildBBoxKm(lat, lon, km){
+
+    const latDiff = km / 111;
+    const lonDiff = km / (111 * Math.cos(lat*Math.PI/180));
 
     return [
-        lon-radius,
-        lat-radius,
-        lon+radius,
-        lat+radius
+        lon-lonDiff,
+        lat-latDiff,
+        lon+lonDiff,
+        lat+latDiff
     ].join(",");
 }
 
 
 // =============================
-// EXPORT
+// DISTANCE KM
+// =============================
+
+function distanceKm(lat1,lon1,lat2,lon2){
+
+    const R=6371;
+    const dLat=(lat2-lat1)*Math.PI/180;
+    const dLon=(lon2-lon1)*Math.PI/180;
+
+    const a=
+        Math.sin(dLat/2)**2 +
+        Math.cos(lat1*Math.PI/180) *
+        Math.cos(lat2*Math.PI/180) *
+        Math.sin(dLon/2)**2;
+
+    return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+
+// =============================
+// AUTO UPDATE POSITION MAP
+// =============================
+
+function initOpenAIPAutoUpdate(){
+
+    if(!map) return;
+
+    map.on("moveend",()=>{
+
+        const c = map.getCenter();
+
+        loadOpenAIPAirspaces(c.lat, c.lng);
+    });
+}
+
+
+// =============================
+// EXPORT GLOBAL
 // =============================
 
 window.loadOpenAIPAirspaces = loadOpenAIPAirspaces;
-
+window.initOpenAIPAutoUpdate = initOpenAIPAutoUpdate;

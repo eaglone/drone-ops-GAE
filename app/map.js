@@ -1,138 +1,113 @@
 /**
- * MAP.JS — Drone OPS
- * Version stable GitHub + OACI + zones
+ * MAP.JS — Drone OPS Map Engine
+ * OSM + IGN OACI + OpenAIP
  */
 
 let map = null;
 let positionMarker = null;
 
 
-// =============================
-// INIT MAP
-// =============================
+// ================= INIT MAP =================
 
 function initMap(){
 
-    if(!document.getElementById("map")) return;
-
-    console.log("INIT MAP...");
+    if (!document.getElementById("map")) return;
 
     map = L.map("map",{
-        zoomControl:true
-    }).setView(
-        [window.latitude || 48.78, window.longitude || 2.22],
-        10
-    );
-
-// ===============================
-// ⭐ FOND OACI IGN AVEC TA CLÉ API
-// ===============================
-
-const oaciLayer = L.tileLayer(
-  "https://data.geopf.fr/private/wmts?" +
-  "SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0" +
-  "&LAYER=GEOGRAPHICALGRIDSYSTEMS.MAPS.SCAN-OACI" +
-  "&STYLE=normal" +
-  "&TILEMATRIXSET=PM" +
-  "&FORMAT=image/jpeg" +
-  "&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}" +
-  "&apikey=8Y5CE2vg2zJMePOhqeHYhXx4fmI3uzpz",
-  {
-    attribution:"© IGN — Carte OACI",
-    maxZoom:18,
-    minZoom:5,
-    crossOrigin:true
-  }
-).addTo(map);
+        zoomControl:true,
+        preferCanvas:true
+    }).setView([window.latitude, window.longitude], 9);
 
 
     // ===============================
-    // PANES PRIORITÉ
+    // ⭐ OPENSTREETMAP (fond détails)
     // ===============================
 
-    // zones aériennes
+    const osm = L.tileLayer(
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        {
+            maxZoom:19,
+            maxNativeZoom:19,
+            attribution:"© OpenStreetMap"
+        }
+    ).addTo(map);
+
+
+    // ===============================
+    // ⭐ IGN OACI aviation overlay
+    // ===============================
+
+    const oaci = L.tileLayer(
+        "https://data.geopf.fr/private/wmts?" +
+        "SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0" +
+        "&LAYER=GEOGRAPHICALGRIDSYSTEMS.MAPS.SCAN-OACI" +
+        "&STYLE=normal" +
+        "&TILEMATRIXSET=PM" +
+        "&FORMAT=image/jpeg" +
+        "&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}" +
+        "&apikey=8Y5CE2vg2zJMePOhqeHYhXx4fmI3uzpz",
+        {
+            maxZoom:18,
+            maxNativeZoom:14,
+            opacity:0.85,
+            attribution:"© IGN OACI",
+            crossOrigin:true
+        }
+    ).addTo(map);
+
+    // OACI au-dessus OSM
+    oaci.bringToFront();
+
+
+    // ===============================
+    // ZONES PRIORITÉ
+    // ===============================
+
     map.createPane("zonesPane");
     map.getPane("zonesPane").style.zIndex = 650;
 
-    // position utilisateur
-    map.createPane("markerPane");
-    map.getPane("markerPane").style.zIndex = 700;
-
 
     // ===============================
-    // CHARGEMENT ZONES
+    // ⭐ OPENAIP INIT (ICI uniquement)
     // ===============================
 
-    if(typeof loadAllZones === "function"){
-        console.log("Chargement zones...");
-        loadAllZones();
+    if(window.initOpenAIPAutoUpdate){
+        initOpenAIPAutoUpdate();
     }
 
-
-    // ===============================
-    // POSITION INITIALE
-    // ===============================
-
-    updateMapPosition(
-        window.latitude || 48.78,
-        window.longitude || 2.22
-    );
-
-
-    console.log("MAP READY");
+    if(window.loadOpenAIPAirspaces){
+        loadOpenAIPAirspaces(window.latitude, window.longitude);
+    }
 }
 
 
-// =============================
-// UPDATE POSITION
-// =============================
+// ================= UPDATE POSITION =================
 
-function updateMapPosition(lat, lon){
+function updateMapPosition(lat,lon){
 
     if(!map) return;
 
-    // déplacement doux
-    map.flyTo([lat, lon], 11, {
-        duration:0.6
-    });
+    map.flyTo([lat,lon],11,{duration:0.6});
 
-    // supprimer ancien marker
-    if(positionMarker){
-        map.removeLayer(positionMarker);
-    }
+    // marqueur position
+    if(positionMarker) map.removeLayer(positionMarker);
 
-    // cercle position
-    positionMarker = L.circle([lat, lon],{
-        pane:"markerPane",
+    positionMarker = L.circle([lat,lon],{
         radius:500,
         color:"#38bdf8",
-        weight:2,
         fillOpacity:0.15
     }).addTo(map);
 
-    // radar pluie si présent
-    if(typeof updateRadar === "function"){
-        updateRadar(lat, lon);
+    // recharge airspaces
+    if(window.loadOpenAIPAirspaces){
+        loadOpenAIPAirspaces(lat,lon);
     }
 
-    console.log("Position MAJ:",lat,lon);
+    updateRadar?.(lat,lon);
 }
 
 
-// =============================
-// UTILITAIRE — CENTRER
-// =============================
-
-function centerMap(lat,lon,zoom=11){
-    if(!map) return;
-    map.setView([lat,lon],zoom);
-}
-
-
-// =============================
-// EXPORT GLOBAL
-// =============================
+// ================= EXPORT =================
 
 window.initMap = initMap;
 window.updateMapPosition = updateMapPosition;
-window.centerMap = centerMap;

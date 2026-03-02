@@ -1,6 +1,6 @@
 /**
  * METEO.JS — Drone OPS ULTRA
- * Version production stable GitHub Pages
+ * Version production stable + prévisions 1h 3h 6h
  */
 
 
@@ -19,13 +19,11 @@ let currentKP = null;
 
 
 /* =========================================
-   KP SOLAIRE (FIX BUG)
+   KP SOLAIRE
 ========================================= */
 
 async function loadKP(){
-
     try{
-
         const data = await cachedFetch(
             "gae_kp",
             "https://services.swpc.noaa.gov/json/planetary_k_index_1m.json"
@@ -33,7 +31,7 @@ async function loadKP(){
 
         if(data?.length){
             currentKP = parseFloat(data[data.length-1].kp_index);
-            localStorage.setItem("gae_kp_cache",currentKP);
+            localStorage.setItem("gae_kp_cache", currentKP);
         }
 
     }catch{
@@ -46,9 +44,9 @@ async function loadKP(){
    ANALYSE SLOT FUTUR
 ========================================= */
 
-function analyseSlot(slot,lim){
+function analyseSlot(slot, lim){
 
-    if(!slot) return {status:"ok",label:"N/A"};
+    if(!slot) return {status:"ok", label:"N/A"};
 
     let status="ok";
     let label="🟢 STABLE";
@@ -62,7 +60,7 @@ function analyseSlot(slot,lim){
         label="🟠 INSTABLE";
     }
 
-    return {status,label,...slot};
+    return {status, label, ...slot};
 }
 
 
@@ -101,13 +99,12 @@ function getRiskScore(wind,rain,vis,kp,lim){
 
 
 /* =========================================
-   ALTITUDE IGN (SAFE)
+   ALTITUDE IGN
 ========================================= */
 
 async function getAltitude(lat,lon){
 
     try{
-
         const controller=new AbortController();
         setTimeout(()=>controller.abort(),3000);
 
@@ -141,10 +138,7 @@ async function loadMeteo(){
 
     try{
 
-        // altitude (non bloquant)
         const altitudePromise=getAltitude(lat,lon);
-
-        /* ================= OPEN METEO ================= */
 
         const url=
         `https://api.open-meteo.com/v1/forecast?latitude=${lat}`+
@@ -160,12 +154,33 @@ async function loadMeteo(){
         const altitude=await altitudePromise;
         const cur=data.current_weather;
 
-        const windNow=Math.round(data.hourly.windspeed_80m[0]||0);
-        const gustNow=Math.round(data.hourly.windgusts_10m[0]||0);
-        const rainNow=data.hourly.precipitation[0]||0;
-        const visNow=(data.hourly.visibility[0]||0)/1000;
-        const cloudNow=data.hourly.cloudcover[0]||0;
-        const windDir=data.hourly.winddirection_80m[0]||0;
+        /* ================= INDEX ACTUEL ================= */
+
+        let nowIndex = data.hourly.time.findIndex(t=>{
+            const d=new Date(t);
+            const n=new Date();
+            return d.getHours()===n.getHours() && d.getDate()===n.getDate();
+        });
+
+        if(nowIndex<0) nowIndex=0;
+
+        const buildSlot = (i)=>({
+            wind: Math.round(data.hourly.windspeed_80m[i] || 0),
+            gust: Math.round(data.hourly.windgusts_10m[i] || 0),
+            rain: data.hourly.precipitation[i] || 0,
+            vis: (data.hourly.visibility[i] || 0)/1000
+        });
+
+        /* ================= ACTUEL ================= */
+
+        const nowSlot = buildSlot(nowIndex);
+
+        const windNow=nowSlot.wind;
+        const gustNow=nowSlot.gust;
+        const rainNow=nowSlot.rain;
+        const visNow=nowSlot.vis;
+        const cloudNow=data.hourly.cloudcover[nowIndex]||0;
+        const windDir=data.hourly.winddirection_80m[nowIndex]||0;
 
         const droneKey=document.getElementById("droneType")?.value||"mini";
         const lim=limits[droneKey];
@@ -175,8 +190,13 @@ async function loadMeteo(){
         const drift=getDrift(windNow);
         const risk=getRiskScore(windNow,rainNow,visNow,currentKP||0,lim);
 
+        /* ================= PREVISIONS ================= */
 
-        /* ================= DECISION VOL ================= */
+        const slot1h=analyseSlot(buildSlot(nowIndex+1),lim);
+        const slot3h=analyseSlot(buildSlot(nowIndex+3),lim);
+        const slot6h=analyseSlot(buildSlot(nowIndex+6),lim);
+
+        /* ================= DECISION ================= */
 
         let niveau="ok";
         let msg="🟢 VOL AUTORISÉ";
@@ -195,7 +215,6 @@ async function loadMeteo(){
             decisionBox.textContent=msg;
         }
 
-
         /* ================= UI ================= */
 
         document.getElementById("meteo").innerHTML=`
@@ -213,6 +232,22 @@ async function loadMeteo(){
             <div class="item">🏔️ Altitude: ${altitude}</div>
             <div class="item ${(currentKP>=5)?"danger":""}">
                 🧲 KP: ${currentKP ?? "N/A"}
+            </div>
+
+            <hr>
+            <div class="forecast ${slot1h.status}">
+                ⏱️ +1h : ${slot1h.label}
+                <br>💨 ${slot1h.wind} | 🌪️ ${slot1h.gust} | 🌧️ ${slot1h.rain} | 👁️ ${slot1h.vis?.toFixed(1)} km
+            </div>
+
+            <div class="forecast ${slot3h.status}">
+                ⏱️ +3h : ${slot3h.label}
+                <br>💨 ${slot3h.wind} | 🌪️ ${slot3h.gust} | 🌧️ ${slot3h.rain} | 👁️ ${slot3h.vis?.toFixed(1)} km
+            </div>
+
+            <div class="forecast ${slot6h.status}">
+                ⏱️ +6h : ${slot6h.label}
+                <br>💨 ${slot6h.wind} | 🌪️ ${slot6h.gust} | 🌧️ ${slot6h.rain} | 👁️ ${slot6h.vis?.toFixed(1)} km
             </div>
         `;
 

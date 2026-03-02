@@ -2,24 +2,21 @@
  * MAP.JS — Drone OPS Tactical Map
  * VERSION GIE PRO — PRODUCTION READY
  *
- * RADAR ARCHITECTURE :
- *   PRIMARY  → Météo-France Package Radar v1
- *              /mosaique/paquet → application/gzip → décompression → PNG → L.imageOverlay
- *   FALLBACK → RainViewer (tiles animés, nowcast +20 min)
+ * RADAR : Météo-France Package Radar v1 UNIQUEMENT
+ *         /mosaique/paquet → application/gzip → décompression pako → PNG → L.imageOverlay
  *
  * TOKEN : injecté automatiquement par GitHub Actions (sed __METEO_FRANCE_API_KEY__)
  *         NE PAS modifier la ligne MF_TOKEN manuellement
  *
- * DÉPENDANCES EXTERNES (à inclure dans votre HTML avant ce script) :
+ * DÉPENDANCE HTML (avant ce script) :
  *   <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
- *   → pako : décompression gzip côté navigateur
  *
  * ORDRE COUCHES :
  *   1. OSM (fond)
  *   2. OACI IGN
  *   3. DGAC officiel IGN
  *   4. DGAC vecteur cliquable (option)
- *   5. Radar météo (MF primaire ou RainViewer fallback)
+ *   5. Radar Météo-France
  *   6. OpenAIP (top)
  */
 
@@ -34,12 +31,9 @@ const GIE_CONFIG = {
 
     MF_BASE_URL: "https://public-api.meteofrance.fr/public/DPPaquetRadar/v1",
 
-    ANIMATION_INTERVAL: 2000,    // ms entre frames MF (données lourdes)
-    REFRESH_INTERVAL:  300_000,  // 5 min — rafraîchissement données
+    ANIMATION_INTERVAL: 2000,   // ms entre frames
+    REFRESH_INTERVAL:  300_000, // 5 min — rafraîchissement données
     RADAR_OPACITY:     0.72,
-
-    RV_FRAMES_PAST:   12,        // frames historiques RainViewer
-    RV_FRAMES_FUTURE:  4,        // frames nowcast RainViewer
 
     // Bounds France Métropole pour L.imageOverlay
     FRANCE_BOUNDS: [[41.0, -5.5], [51.5, 10.0]],
@@ -55,138 +49,101 @@ let osmLayer       = null;
 let oaciLayer      = null;
 
 const radarState = {
-    source:    null,   // "meteofrance" | "rainviewer" | null
     layer:     null,
-    mfFrames:  [],     // [{time, objectUrl}] — URLs blob PNG décompressées
-    rvFrames:  [],     // RainViewer frames [{time, path, type}]
+    frames:    [],     // [{time, objectUrl, name}]
     index:     0,
     timer:     null,
     isPlaying: true,
+    ready:     false,
 };
 
 // =====================================================
-// MÉTÉO-FRANCE — DÉCOMPRESSION GZIP → PNG → BLOB URL
+// MÉTÉO-FRANCE — DÉCOMPRESSION GZIP → PNG → BLOB URLS
 // =====================================================
 
-/**
- * Télécharge le paquet gzip MF, décompresse avec pako,
- * extrait les fichiers PNG internes et retourne des blob URLs.
- *
- * Format du zip : fichiers nommés ex. "METROFR_LAME_20240301T1200Z.png"
- * On trie par nom (= chronologique) et on crée des object URLs.
- */
 async function fetchMFRadarFrames() {
 
     const res = await fetch(`${GIE_CONFIG.MF_BASE_URL}/mosaique/paquet`, {
         headers: {
             "Authorization": `Bearer ${GIE_CONFIG.MF_TOKEN}`,
-            "Accept": "application/gzip"
+            "Accept":        "application/gzip"
         },
         cache: "no-cache"
     });
 
     if (!res.ok) throw new Error(`MF API ${res.status} — ${res.statusText}`);
 
-    // Récupération du buffer binaire gzip
     const arrayBuffer = await res.arrayBuffer();
-    const uint8 = new Uint8Array(arrayBuffer);
+    const uint8       = new Uint8Array(arrayBuffer);
 
-    // Décompression gzip → données brutes (ZIP ou PNG unique)
+    // Décompression gzip
     let decompressed;
     try {
         decompressed = pako.inflate(uint8);
-    } catch (e) {
-        // Parfois double-gzip, on tente ungzip
+    } catch {
         decompressed = pako.ungzip(uint8);
     }
 
-    // Cas 1 : le résultat est un PNG direct (mosaïque unique)
+    // Cas 1 : résultat = PNG unique
     if (isPNG(decompressed)) {
-        const blob    = new Blob([decompressed], { type: "image/png" });
-        const url     = URL.createObjectURL(blob);
-        return [{ time: new Date(), objectUrl: url }];
+        const blob = new Blob([decompressed], { type: "image/png" });
+        return [{ time: new Date(), objectUrl: URL.createObjectURL(blob), name: "mosaique.png" }];
     }
 
-    // Cas 2 : le résultat est un ZIP contenant plusieurs PNGs
-    // On parse le ZIP manuellement (structure ZIP locale)
+    // Cas 2 : résultat = ZIP contenant plusieurs PNGs
     const files = parseZipEntries(decompressed);
-
     if (!files.length) throw new Error("MF: aucun fichier PNG dans le paquet");
 
-    // Tri chronologique par nom de fichier
     files.sort((a, b) => a.name.localeCompare(b.name));
 
-    // Conversion en blob URLs + extraction timestamp depuis le nom
     return files.map(f => ({
         time:      extractTimeFromFilename(f.name),
         objectUrl: URL.createObjectURL(new Blob([f.data], { type: "image/png" })),
-        name:      f.name
+        name:      f.name,
     }));
 }
 
-/** Vérifie la magic bytes PNG */
 function isPNG(data) {
     return data[0] === 0x89 && data[1] === 0x50 &&
            data[2] === 0x4E && data[3] === 0x47;
 }
 
-/**
- * Parse basique d'un ZIP pour extraire les entrées PNG.
- * Implémentation minimaliste — gère les ZIP non-chiffrés standard.
- */
 function parseZipEntries(data) {
-
     const entries = [];
     let i = 0;
 
     while (i < data.length - 4) {
+        // Local File Header signature: PK\x03\x04
+        if (data[i] === 0x50 && data[i+1] === 0x4B &&
+            data[i+2] === 0x03 && data[i+3] === 0x04) {
 
-        // Signature Local File Header : PK\x03\x04
-        if (data[i]     === 0x50 && data[i + 1] === 0x4B &&
-            data[i + 2] === 0x03 && data[i + 3] === 0x04) {
-
-            const compressionMethod = data[i + 8]  | (data[i + 9]  << 8);
-            const compressedSize    = data[i + 18] | (data[i + 19] << 8) |
-                                     (data[i + 20] << 16) | (data[i + 21] << 24);
-            const filenameLength    = data[i + 26] | (data[i + 27] << 8);
-            const extraLength       = data[i + 28] | (data[i + 29] << 8);
+            const compressionMethod = data[i+8]  | (data[i+9]  << 8);
+            const compressedSize    = data[i+18] | (data[i+19] << 8) | (data[i+20] << 16) | (data[i+21] << 24);
+            const filenameLength    = data[i+26] | (data[i+27] << 8);
+            const extraLength       = data[i+28] | (data[i+29] << 8);
 
             const filenameStart = i + 30;
-            const filename = new TextDecoder().decode(
-                data.slice(filenameStart, filenameStart + filenameLength)
-            );
+            const filename      = new TextDecoder().decode(data.slice(filenameStart, filenameStart + filenameLength));
+            const dataStart     = filenameStart + filenameLength + extraLength;
+            const dataEnd       = dataStart + compressedSize;
 
-            const dataStart = filenameStart + filenameLength + extraLength;
-            const dataEnd   = dataStart + compressedSize;
-
-            // On extrait uniquement les PNG
             if (filename.toLowerCase().endsWith(".png")) {
                 let fileData = data.slice(dataStart, dataEnd);
-
-                // Décompression si DEFLATE (méthode 8)
                 if (compressionMethod === 8) {
-                    try { fileData = pako.inflateRaw(fileData); } catch (e) {}
+                    try { fileData = pako.inflateRaw(fileData); } catch {}
                 }
-
                 entries.push({ name: filename, data: fileData });
             }
 
             i = dataEnd;
-
         } else {
             i++;
         }
     }
-
     return entries;
 }
 
-/**
- * Extrait un timestamp Date depuis le nom de fichier MF.
- * Format typique : QUELQUECHOSE_20240301T1200Z.png
- */
 function extractTimeFromFilename(filename) {
-    // Cherche un pattern YYYYMMDDTHHMMZ ou YYYYMMDD_HHMM
     const match = filename.match(/(\d{8})T(\d{4})Z?/);
     if (match) {
         const [, date, time] = match;
@@ -196,17 +153,12 @@ function extractTimeFromFilename(filename) {
     return new Date();
 }
 
-/**
- * Libère les blob URLs précédentes pour éviter les fuites mémoire.
- */
 function revokeMFFrames(frames) {
-    frames.forEach(f => {
-        if (f.objectUrl) URL.revokeObjectURL(f.objectUrl);
-    });
+    frames.forEach(f => { if (f.objectUrl) URL.revokeObjectURL(f.objectUrl); });
 }
 
 // =====================================================
-// MÉTÉO-FRANCE — INIT
+// INIT RADAR MF
 // =====================================================
 
 async function initMFRadar() {
@@ -214,111 +166,45 @@ async function initMFRadar() {
     const token = GIE_CONFIG.MF_TOKEN;
 
     if (!token || token === "__METEO_FRANCE_API_KEY__") {
-        console.warn("⚠️ Token MF non injecté → fallback RainViewer");
-        return false;
+        throw new Error("Token MF non injecté — vérifiez votre secret GitHub et le workflow CI/CD");
     }
 
     if (typeof pako === "undefined") {
-        console.warn("⚠️ pako non chargé → fallback RainViewer");
-        return false;
+        throw new Error("pako non chargé — ajoutez le script pako dans votre HTML");
     }
 
-    try {
-        console.log("🇫🇷 Init Radar Météo-France — téléchargement paquet gzip…");
+    console.log("🇫🇷 Init Radar Météo-France — téléchargement paquet gzip…");
 
-        const frames = await fetchMFRadarFrames();
+    const frames = await fetchMFRadarFrames();
 
-        radarState.mfFrames = frames;
-        radarState.source   = "meteofrance";
-        radarState.index    = 0;
+    radarState.frames = frames;
+    radarState.index  = 0;
+    radarState.ready  = true;
 
-        if (!radarState.layer) {
-            radarState.layer = L.imageOverlay(
-                frames[0].objectUrl,
-                GIE_CONFIG.FRANCE_BOUNDS,
-                {
-                    pane:        "weatherPane",
-                    opacity:     GIE_CONFIG.RADAR_OPACITY,
-                    interactive: false,
-                    attribution: "© Météo-France — Radar mosaïque officiel"
-                }
-            );
-        } else {
-            radarState.layer.setUrl(frames[0].objectUrl);
-        }
-
-        startRadarAnimation();
-        updateRadarPanel();
-
-        console.log(`✅ MF Radar prêt — ${frames.length} frame(s)`);
-        return true;
-
-    } catch (e) {
-        console.warn("❌ MF Radar échoué :", e.message);
-        return false;
+    if (!radarState.layer) {
+        radarState.layer = L.imageOverlay(
+            frames[0].objectUrl,
+            GIE_CONFIG.FRANCE_BOUNDS,
+            {
+                pane:        "weatherPane",
+                opacity:     GIE_CONFIG.RADAR_OPACITY,
+                interactive: false,
+                attribution: "© Météo-France — Radar mosaïque officiel"
+            }
+        );
+    } else {
+        radarState.layer.setUrl(frames[0].objectUrl);
     }
-}
-
-// =====================================================
-// RAINVIEWER — FALLBACK MONDIAL
-// =====================================================
-
-function buildRVUrl(path) {
-    // 512px / Titan color (6) / Smooth / Snow
-    return `https://tilecache.rainviewer.com${path}/512/{z}/{x}/{y}/6/1_1.png`;
-}
-
-async function fetchRVFrames() {
-
-    const res = await fetch("https://api.rainviewer.com/public/weather-maps.json", {
-        cache: "no-cache"
-    });
-
-    if (!res.ok) throw new Error(`RainViewer API ${res.status}`);
-
-    const data = await res.json();
-
-    const past   = (data?.radar?.past    || []).slice(-GIE_CONFIG.RV_FRAMES_PAST)    .map(f => ({ ...f, type: "past"    }));
-    const future = (data?.radar?.nowcast || []).slice(0, GIE_CONFIG.RV_FRAMES_FUTURE) .map(f => ({ ...f, type: "nowcast" }));
-
-    return [...past, ...future];
-}
-
-async function initRainViewer() {
-
-    console.log("🌧️ Init RainViewer (fallback)");
-
-    const frames = await fetchRVFrames();
-    if (!frames.length) throw new Error("RainViewer: aucune frame");
-
-    radarState.rvFrames = frames;
-    radarState.source   = "rainviewer";
-    radarState.index    = 0;
-
-    // On passe d'un imageOverlay (MF) à un tileLayer (RV)
-    // → on recrée toujours la couche ici
-    radarState.layer = L.tileLayer(buildRVUrl(frames[0].path), {
-        pane:              "weatherPane",
-        opacity:           GIE_CONFIG.RADAR_OPACITY,
-        maxNativeZoom:     10,
-        maxZoom:           18,
-        keepBuffer:        8,
-        updateWhenIdle:    true,
-        updateWhenZooming: false,
-        updateInterval:    200,
-        detectRetina:      true,
-        crossOrigin:       true,
-        attribution:       "© RainViewer (fallback)"
-    });
 
     startRadarAnimation();
     updateRadarPanel();
 
-    console.log(`✅ RainViewer prêt — ${frames.length} frames`);
+    console.log(`✅ MF Radar prêt — ${frames.length} frame(s)`);
+    return radarState.layer;
 }
 
 // =====================================================
-// ANIMATION RADAR (commune MF + RainViewer)
+// ANIMATION
 // =====================================================
 
 function startRadarAnimation() {
@@ -326,7 +212,7 @@ function startRadarAnimation() {
     if (radarState.timer) clearInterval(radarState.timer);
 
     radarState.timer     = setInterval(() => {
-        if (radarState.layer) stepRadar(1);
+        if (radarState.layer && radarState.ready) stepRadar(1);
     }, GIE_CONFIG.ANIMATION_INTERVAL);
 
     radarState.isPlaying = true;
@@ -339,63 +225,17 @@ function stopRadarAnimation() {
 
 function stepRadar(direction = 1) {
 
-    const { source, layer } = radarState;
-    if (!layer) return;
+    const { layer, frames } = radarState;
+    if (!layer || !frames.length) return;
 
-    const FADE = 150; // ms
+    radarState.index = (radarState.index + direction + frames.length) % frames.length;
 
-    if (source === "meteofrance") {
-
-        const frames = radarState.mfFrames;
-        if (!frames.length) return;
-
-        radarState.index = (radarState.index + direction + frames.length) % frames.length;
-
-        layer.setOpacity(0);
-        setTimeout(() => {
-            layer.setUrl(frames[radarState.index].objectUrl);
-            setTimeout(() => { layer.setOpacity(GIE_CONFIG.RADAR_OPACITY); updateRadarPanel(); }, FADE);
-        }, FADE);
-
-    } else if (source === "rainviewer") {
-
-        const frames = radarState.rvFrames;
-        if (!frames.length) return;
-
-        radarState.index = (radarState.index + direction + frames.length) % frames.length;
-        const frame      = frames[radarState.index];
-
-        layer.setOpacity(0);
-        setTimeout(() => {
-            layer.setUrl(buildRVUrl(frame.path));
-            setTimeout(() => {
-                layer.setOpacity(
-                    frame.type === "nowcast"
-                        ? GIE_CONFIG.RADAR_OPACITY * 0.8
-                        : GIE_CONFIG.RADAR_OPACITY
-                );
-                updateRadarPanel();
-            }, FADE);
-        }, FADE);
-    }
-}
-
-// =====================================================
-// INIT RADAR — MF primaire → RainViewer fallback
-// =====================================================
-
-async function initRadar() {
-
-    try {
-        const mfOk = await initMFRadar();
-        if (!mfOk) await initRainViewer();
-    } catch (e) {
-        console.warn("MF échoué, tentative RainViewer :", e);
-        try { await initRainViewer(); }
-        catch (e2) { console.error("❌ Aucun radar disponible :", e2); }
-    }
-
-    return radarState.layer;
+    const FADE = 150;
+    layer.setOpacity(0);
+    setTimeout(() => {
+        layer.setUrl(frames[radarState.index].objectUrl);
+        setTimeout(() => { layer.setOpacity(GIE_CONFIG.RADAR_OPACITY); updateRadarPanel(); }, FADE);
+    }, FADE);
 }
 
 // =====================================================
@@ -405,34 +245,19 @@ async function initRadar() {
 function startRadarAutoRefresh() {
 
     setInterval(async () => {
-        console.log(`🔄 Refresh radar [${radarState.source}]`);
+        console.log("🔄 Refresh radar Météo-France");
         try {
-            if (radarState.source === "meteofrance") {
-
-                const newFrames = await fetchMFRadarFrames();
-                if (newFrames.length) {
-                    // Libération mémoire des anciens blobs
-                    revokeMFFrames(radarState.mfFrames);
-                    radarState.mfFrames = newFrames;
-                    radarState.index    = 0;
-                    console.log(`✅ MF: ${newFrames.length} frame(s) rafraîchie(s)`);
-                }
-
-            } else if (radarState.source === "rainviewer") {
-
-                const frames = await fetchRVFrames();
-                if (frames.length) {
-                    radarState.rvFrames = frames;
-                    radarState.index    = 0;
-                }
+            const newFrames = await fetchMFRadarFrames();
+            if (newFrames.length) {
+                revokeMFFrames(radarState.frames);
+                radarState.frames = newFrames;
+                radarState.index  = 0;
+                console.log(`✅ MF: ${newFrames.length} frame(s) rafraîchie(s)`);
             }
-
             updateRadarPanel();
-
         } catch (e) {
-            console.warn("⚠️ Refresh radar échoué :", e);
+            console.warn("⚠️ Refresh MF échoué :", e.message);
         }
-
     }, GIE_CONFIG.REFRESH_INTERVAL);
 }
 
@@ -442,41 +267,21 @@ function startRadarAutoRefresh() {
 
 function getRadarFrameInfo() {
 
-    const { source, index, mfFrames, rvFrames, isPlaying } = radarState;
+    const { frames, index, isPlaying, ready } = radarState;
 
-    if (source === "meteofrance" && mfFrames.length) {
-        const frame = mfFrames[index];
-        const t     = frame?.time;
-        return {
-            time:      t ? t.toUTCString().slice(5, 22) + " UTC" : "--:-- UTC",
-            type:      "OFFICIEL MF",
-            typeColor: "#22c55e",
-            source:    "Météo-France",
-            isPlaying,
-            total:     mfFrames.length,
-            current:   index + 1,
-        };
+    if (!ready || !frames.length) {
+        return { time: "--:-- UTC", type: "CHARGEMENT…", isPlaying: false, total: 0, current: 0 };
     }
 
-    if (source === "rainviewer" && rvFrames.length) {
-        const frame     = rvFrames[index];
-        const isNowcast = frame?.type === "nowcast";
-        return {
-            time:      frame?.time
-                ? new Date(frame.time * 1000).toUTCString().slice(5, 22) + " UTC"
-                : "--:-- UTC",
-            type:      isNowcast ? "▶ NOWCAST" : "◀ HISTORIQUE",
-            typeColor: isNowcast ? "#f59e0b" : "#38bdf8",
-            source:    "RainViewer (fallback)",
-            isPlaying,
-            total:     rvFrames.length,
-            current:   index + 1,
-        };
-    }
+    const frame = frames[index];
+    const t     = frame?.time;
 
     return {
-        time: "--:-- UTC", type: "CHARGEMENT…", typeColor: "#64748b",
-        source: "—", isPlaying: false, total: 0, current: 0
+        time:    t ? t.toUTCString().slice(5, 22) + " UTC" : "--:-- UTC",
+        type:    "OFFICIEL MF",
+        isPlaying,
+        total:   frames.length,
+        current: index + 1,
     };
 }
 
@@ -520,8 +325,8 @@ function createRadarPanel() {
 
     panel.innerHTML = `
         <div style="display:flex;flex-direction:column;gap:2px;min-width:130px;">
-            <span id="gie-radar-source" style="font-size:9px;color:#64748b;letter-spacing:1px;text-transform:uppercase;">—</span>
-            <span id="gie-radar-type"   style="font-weight:700;letter-spacing:1px;font-size:10px;">CHARGEMENT…</span>
+            <span style="font-size:9px;color:#22c55e;letter-spacing:1px;text-transform:uppercase;">Météo-France</span>
+            <span id="gie-radar-type" style="font-weight:700;letter-spacing:1px;font-size:10px;color:#22c55e;">OFFICIEL MF</span>
         </div>
         <div style="width:1px;height:32px;background:rgba(56,189,248,0.15);"></div>
         ${btn("gie-prev", "◀", "Frame précédente")}
@@ -565,10 +370,7 @@ function updateRadarPanel() {
     const q    = id => panel.querySelector(id);
 
     const typeEl = q("#gie-radar-type");
-    if (typeEl) { typeEl.textContent = info.type; typeEl.style.color = info.typeColor; }
-
-    const srcEl = q("#gie-radar-source");
-    if (srcEl) srcEl.textContent = info.source;
+    if (typeEl) typeEl.textContent = info.type;
 
     const tsEl = q("#gie-radar-timestamp");
     if (tsEl) tsEl.textContent = info.time;
@@ -658,10 +460,21 @@ async function initMap() {
         }
     }
 
-    // ================= RADAR (MF → RainViewer fallback)
+    // ================= RADAR MF
 
-    const radarLayer = await initRadar();
-    if (radarLayer) radarLayer.addTo(map);
+    let radarLayer = null;
+    try {
+        radarLayer = await initMFRadar();
+        if (radarLayer) radarLayer.addTo(map);
+    } catch (e) {
+        console.error("❌ Radar MF indisponible :", e.message);
+        // Affiche un message d'erreur discret sur la carte
+        const errDiv = document.createElement("div");
+        errDiv.style.cssText = "position:fixed;top:12px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.9);color:#fff;padding:6px 14px;border-radius:6px;font-size:11px;font-family:monospace;z-index:9999;";
+        errDiv.textContent = `⚠️ Radar MF indisponible — ${e.message}`;
+        document.body.appendChild(errDiv);
+        setTimeout(() => errDiv.remove(), 8000);
+    }
 
     // ================= CONTRÔLE COUCHES
 
@@ -673,26 +486,20 @@ async function initMap() {
         "Espaces aériens OpenAIP": window.openAipLayer,
     };
 
-    if (radarLayer) {
-        overlays[radarState.source === "meteofrance"
-            ? "Radar Météo-France officiel"
-            : "Radar pluie animé (RainViewer)"
-        ] = radarLayer;
-    }
-
-    if (dgacLayer) overlays["DGAC Zones cliquables"] = dgacLayer;
+    if (radarLayer) overlays["Radar Météo-France officiel"] = radarLayer;
+    if (dgacLayer)  overlays["DGAC Zones cliquables"]       = dgacLayer;
 
     L.control.layers(baseMaps, overlays, { collapsed: false }).addTo(map);
 
     // ================= AUTO-REFRESH + OPENAIP
 
-    startRadarAutoRefresh();
+    if (radarLayer) startRadarAutoRefresh();
 
     setTimeout(() => {
         if (typeof initOpenAIPAutoUpdate === "function") initOpenAIPAutoUpdate();
     }, 500);
 
-    console.log(`✅ MAP READY — radar: ${radarState.source || "aucun"}`);
+    console.log("✅ MAP READY — radar: Météo-France");
 }
 
 // =====================================================
@@ -738,5 +545,5 @@ function setOpenAIPLayer(layer) {
 window.initMap           = initMap;
 window.updateMapPosition = updateMapPosition;
 window.setOpenAIPLayer   = setOpenAIPLayer;
-window.radarState        = radarState;   // debug console
-window.GIE_CONFIG        = GIE_CONFIG;   // accès config runtime
+window.radarState        = radarState;  // debug console
+window.GIE_CONFIG        = GIE_CONFIG;  // accès config runtime

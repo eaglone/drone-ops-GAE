@@ -22,7 +22,7 @@
 const GIE_CONFIG = {
 
     // ⭐ MÉTÉO-FRANCE — collez votre nouveau token ici (JAMAIS dans un chat)
-    MF_TOKEN: "VOTRE_NOUVEAU_TOKEN_ICI",
+  MF_TOKEN: "__METEO_FRANCE_API_KEY__",
 
     // Endpoint Package Radar Météo-France
     MF_BASE_URL: "https://public-api.meteofrance.fr/public/DPPaquetRadar/v1",
